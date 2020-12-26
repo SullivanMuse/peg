@@ -15,20 +15,20 @@ use syn::{
 };
 
 #[derive(Debug)]
-enum Atom {
-    Ident(Ident),
+enum Atom<Key> {
+    Ident(Key),
     Str(LitStr),
     Char(LitChar),
     Range(LitChar, LitChar),
-    Paren(Box<Expr>),
+    Paren(Box<Expr<Key>>),
 }
 
-impl Parse for Atom {
+impl Parse for Atom<Ident> {
     fn parse(input: ParseStream) -> Result<Self> {
         if input.peek(Paren) {
             let content;
             parenthesized!(content in input);
-            let expr = content.parse::<Expr>()?;
+            let expr = content.parse::<Expr<Ident>>()?;
             Ok(Self::Paren(Box::new(expr)))
         } else if input.peek(Ident) {
             Ok(Self::Ident(input.parse::<Ident>()?))
@@ -49,7 +49,7 @@ impl Parse for Atom {
 }
 
 #[derive(Debug)]
-enum Expr {
+enum Expr<Key> {
     Alt(Box<Self>, Box<Self>),
     Cat(Vec<Self>),
 
@@ -65,12 +65,12 @@ enum Expr {
 
     Named(Ident, Box<Self>),
 
-    Atom(Atom),
+    Atom(Atom<Key>),
 }
 
-impl Expr {
+impl Expr<Ident> {
     fn atom(input: ParseStream) -> Result<Self> {
-        Ok(Self::Atom(input.parse::<Atom>()?))
+        Ok(Self::Atom(input.parse::<Atom<Ident>>()?))
     }
 
     /// Handle prefix operators (!, &, @)
@@ -138,7 +138,7 @@ impl Expr {
     }
 }
 
-impl Parse for Expr {
+impl Parse for Expr<Ident> {
     fn parse(input: ParseStream) -> Result<Self> {
         let mut left = Self::cat(input)?;
         while input.peek(Token![|]) {
@@ -151,16 +151,16 @@ impl Parse for Expr {
 }
 
 #[derive(Debug)]
-struct Rule {
+struct Rule<Key> {
     vis: Option<Visibility>,
-    name: Ident,
+    name: Key,
     ty: Option<Type>,
-    expr: Expr,
+    expr: Expr<Key>,
 
     is_left_rec: bool,
 }
 
-impl Parse for Rule {
+impl Parse for Rule<Ident> {
     fn parse(input: ParseStream) -> Result<Self> {
         let vis = if !input.peek(Ident) {
             Some(input.parse::<Visibility>()?)
@@ -175,7 +175,7 @@ impl Parse for Rule {
             None
         };
         input.parse::<Token![=]>()?;
-        let expr = input.parse::<Expr>()?;
+        let expr = input.parse::<Expr<Ident>>()?;
         let is_left_rec = false;
         Ok(Self { vis, name, ty, expr, is_left_rec })
     }
@@ -183,21 +183,22 @@ impl Parse for Rule {
 
 #[derive(Debug)]
 struct Grammar {
-    rules: Vec<Rule>,
-    rule_indices: HashMap<Ident, usize>,
-}
-
-impl Grammar {
+    rules: Vec<Rule<Ident>>,
 }
 
 impl Parse for Grammar {
     fn parse(input: ParseStream) -> Result<Self> {
         let mut rules = vec![];
         while input.peek(Ident) || input.peek(Token![pub]) || input.peek(Token![crate]) {
-            rules.push(input.parse::<Rule>()?);
+            rules.push(input.parse::<Rule<Ident>>()?);
         }
         Ok(Self { rules })
     }
+}
+
+#[derive(Debug)]
+struct Compiler {
+    rules: Vec<()>,
 }
 
 #[proc_macro]
