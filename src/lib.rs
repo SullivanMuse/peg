@@ -5,6 +5,7 @@ use syn::{
     LitChar,
     LitStr,
     Result,
+    Type,
     Token,
     token::Paren,
     parenthesized,
@@ -110,7 +111,6 @@ impl Expr {
     }
 
     fn named(input: ParseStream) -> Result<Self> {
-        dbg!(input.peek2(Token![:]));
         if input.peek2(Token![:]) {
             let name = input.parse::<Ident>()?;
             input.parse::<Token![:]>()?;
@@ -152,15 +152,22 @@ impl Parse for Expr {
 #[derive(Debug)]
 struct Rule {
     name: Ident,
+    ty: Option<Type>,
     expr: Expr,
 }
 
 impl Parse for Rule {
     fn parse(input: ParseStream) -> Result<Self> {
         let name = input.parse::<Ident>()?;
+        let ty = if input.peek(Token![->]) {
+            input.parse::<Token![->]>()?;
+            Some(input.parse::<Type>()?)
+        } else {
+            None
+        };
         input.parse::<Token![=]>()?;
         let expr = input.parse::<Expr>()?;
-        Ok(Self { name, expr })
+        Ok(Self { name, ty, expr })
     }
 }
 
