@@ -13,6 +13,8 @@ enum Expr {
     Alt(Box<Self>, Box<Self>),
     Cat(Vec<Self>),
     Many0(Box<Self>),
+    Many1(Box<Self>),
+    Optional(Box<Self>),
     Call(Ident),
 }
 
@@ -22,13 +24,22 @@ impl Expr {
     }
 
     fn many0(input: ParseStream) -> Result<Self> {
-        let call = Self::call(input)?;
-        if input.peek(Token![*]) {
-            input.parse::<Token![*]>()?;
-            Ok(Self::Many0(Box::new(call)))
-        } else {
-            Ok(call)
+        let mut inner = Self::call(input)?;
+        loop {
+            if input.peek(Token![*]) {
+                input.parse::<Token![*]>()?;
+                inner = Self::Many0(Box::new(inner));
+            } else if input.peek(Token![?]) {
+                input.parse::<Token![?]>()?;
+                inner = Self::Optional(Box::new(inner));
+            } else if input.peek(Token![+]) {
+                input.parse::<Token![+]>()?;
+                inner = Self::Many1(Box::new(inner));
+            } else {
+                break
+            }
         }
+        Ok(inner)
     }
 
     fn cat(input: ParseStream) -> Result<Self> {

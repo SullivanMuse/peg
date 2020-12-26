@@ -3,7 +3,7 @@ use pgen::peg;
 #[test]
 fn test() {
     peg!{
-        space = hooplah* // Hello, there!
+        space = hooplah* | another*+? // Hello, there!
     }
     assert!(true);
 }
