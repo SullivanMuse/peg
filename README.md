@@ -55,3 +55,11 @@ postfix = postfix_op atom
 atom = name | literal | parenthesized
 parenthesized = '(' alt ')'
 ```
+
+# Left-Recursion
+
+## Detection
+
+## Runtime
+
+Try the rule over and over, with recursion depth from 1.., until the parse fails. Now the latest cached result is the answer.

@@ -156,6 +156,8 @@ struct Rule {
     name: Ident,
     ty: Option<Type>,
     expr: Expr,
+
+    is_left_rec: bool,
 }
 
 impl Parse for Rule {
@@ -174,13 +176,18 @@ impl Parse for Rule {
         };
         input.parse::<Token![=]>()?;
         let expr = input.parse::<Expr>()?;
-        Ok(Self { vis, name, ty, expr })
+        let is_left_rec = false;
+        Ok(Self { vis, name, ty, expr, is_left_rec })
     }
 }
 
 #[derive(Debug)]
 struct Grammar {
     rules: Vec<Rule>,
+    rule_indices: HashMap<Ident, usize>,
+}
+
+impl Grammar {
 }
 
 impl Parse for Grammar {
