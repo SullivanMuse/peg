@@ -7,6 +7,7 @@ use syn::{
     Result,
     Type,
     Token,
+    Visibility,
     token::Paren,
     parenthesized,
     parse::{Parse, ParseStream},
@@ -151,6 +152,7 @@ impl Parse for Expr {
 
 #[derive(Debug)]
 struct Rule {
+    vis: Option<Visibility>,
     name: Ident,
     ty: Option<Type>,
     expr: Expr,
@@ -158,6 +160,11 @@ struct Rule {
 
 impl Parse for Rule {
     fn parse(input: ParseStream) -> Result<Self> {
+        let vis = if !input.peek(Ident) {
+            Some(input.parse::<Visibility>()?)
+        } else {
+            None
+        };
         let name = input.parse::<Ident>()?;
         let ty = if input.peek(Token![->]) {
             input.parse::<Token![->]>()?;
@@ -167,7 +174,7 @@ impl Parse for Rule {
         };
         input.parse::<Token![=]>()?;
         let expr = input.parse::<Expr>()?;
-        Ok(Self { name, ty, expr })
+        Ok(Self { vis, name, ty, expr })
     }
 }
 
@@ -179,7 +186,7 @@ struct Grammar {
 impl Parse for Grammar {
     fn parse(input: ParseStream) -> Result<Self> {
         let mut rules = vec![];
-        while input.peek(Ident) {
+        while input.peek(Ident) || input.peek(Token![pub]) || input.peek(Token![crate]) {
             rules.push(input.parse::<Rule>()?);
         }
         Ok(Self { rules })
@@ -188,6 +195,6 @@ impl Parse for Grammar {
 
 #[proc_macro]
 pub fn peg(input: TokenStream) -> TokenStream {
-    dbg!(parse_macro_input!(input as Grammar));
+    parse_macro_input!(input as Grammar);
     quote!().into()
 }
