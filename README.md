@@ -63,3 +63,11 @@ parenthesized = '(' alt ')'
 ## Runtime
 
 Try the rule over and over, with recursion depth from 1.., until the parse fails. Now the latest cached result is the answer.
+
+# Compilation
+
+- Parse the syntax
+- Replace all rule names with indices
+- Detect overwriting of built-in rules
+- Mark left-recursive rules
+- Report refutable bindings
