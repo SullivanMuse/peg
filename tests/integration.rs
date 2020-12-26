@@ -26,5 +26,6 @@ fn test_paren() {
 fn test_duplicate_rules() {
     peg! {
         x = x y
+        y = y x
     }
 }

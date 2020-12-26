@@ -137,7 +137,7 @@ impl Expr<Ident> {
 
     fn cat(input: ParseStream) -> Result<Self> {
         let mut seq = vec![Self::named(input)?];
-        while input.peek(Ident)
+        while (input.peek(Ident) && !input.peek2(Token![=]) && !input.peek2(Token![->]))
             || input.peek(LitStr)
             || input.peek(LitChar)
             || input.peek(Token![!])
@@ -239,7 +239,7 @@ impl Grammar {
         let mut names = HashSet::new();
         let mut indices = HashMap::new();
         let mut reverse = HashMap::new();
-        for (index, rule) in self.rules.iter().enumerate() {
+        for rule in self.rules.iter() {
             if names.contains(&rule.name) {
                 panic!("Two rules with the same name: {}", &rule.name);
             } else {
