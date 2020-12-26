@@ -12,9 +12,17 @@ use syn::{
 enum Expr {
     Alt(Box<Self>, Box<Self>),
     Cat(Vec<Self>),
+
+    // Postfix
     Many0(Box<Self>),
     Many1(Box<Self>),
     Optional(Box<Self>),
+
+    // Prefix
+    Pos(Box<Self>),
+    Neg(Box<Self>),
+    Atomic(Box<Self>),
+
     Call(Ident),
 }
 
@@ -23,8 +31,27 @@ impl Expr {
         Ok(Self::Call(input.parse::<Ident>()?))
     }
 
-    fn many0(input: ParseStream) -> Result<Self> {
-        let mut inner = Self::call(input)?;
+    /// Handle prefix operators (!, &, @)
+    fn prefix(input: ParseStream) -> Result<Self> {
+        if input.peek(Token![!]) {
+            input.parse::<Token![!]>()?;
+            let inner = Self::prefix(input)?;
+            Ok(Self::Neg(Box::new(inner)))
+        } else if input.peek(Token![&]) {
+            input.parse::<Token![&]>()?;
+            let inner = Self::prefix(input)?;
+            Ok(Self::Pos(Box::new(inner)))
+        } else if input.peek(Token![@]) {
+            input.parse::<Token![@]>()?;
+            let inner = Self::prefix(input)?;
+            Ok(Self::Atomic(Box::new(inner)))
+        } else {
+            Self::call(input)
+        }
+    }
+
+    fn postfix(input: ParseStream) -> Result<Self> {
+        let mut inner = Self::prefix(input)?;
         loop {
             if input.peek(Token![*]) {
                 input.parse::<Token![*]>()?;
@@ -43,9 +70,9 @@ impl Expr {
     }
 
     fn cat(input: ParseStream) -> Result<Self> {
-        let mut seq = vec![Self::many0(input)?];
+        let mut seq = vec![Self::postfix(input)?];
         while input.peek(Ident) {
-            seq.push(Self::many0(input)?);
+            seq.push(Self::postfix(input)?);
         }
         Ok(Self::Cat(seq))
     }
