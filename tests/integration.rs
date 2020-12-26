@@ -14,3 +14,10 @@ fn test_atom() {
         space = atom | '0' | "0" | '0'..='9'
     }
 }
+
+#[test]
+fn test_paren() {
+    peg! {
+        space = atom (another | another)
+    }
+}

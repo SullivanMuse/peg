@@ -6,6 +6,8 @@ use syn::{
     LitStr,
     Result,
     Token,
+    token::Paren,
+    parenthesized,
     parse::{Parse, ParseStream},
     parse_macro_input,
 };
@@ -16,11 +18,17 @@ enum Atom {
     Str(LitStr),
     Char(LitChar),
     Range(LitChar, LitChar),
+    Paren(Box<Expr>),
 }
 
 impl Parse for Atom {
     fn parse(input: ParseStream) -> Result<Self> {
-        if input.peek(Ident) {
+        if input.peek(Paren) {
+            let content;
+            parenthesized!(content in input);
+            let expr = content.parse::<Expr>()?;
+            Ok(Self::Paren(Box::new(expr)))
+        } else if input.peek(Ident) {
             Ok(Self::Ident(input.parse::<Ident>()?))
         } else if input.peek(LitStr) {
             Ok(Self::Str(input.parse::<LitStr>()?))
@@ -101,7 +109,14 @@ impl Expr {
 
     fn cat(input: ParseStream) -> Result<Self> {
         let mut seq = vec![Self::postfix(input)?];
-        while input.peek(Ident) {
+        while input.peek(Ident)
+            || input.peek(LitStr)
+            || input.peek(LitChar)
+            || input.peek(Token![!])
+            || input.peek(Token![@])
+            || input.peek(Token![&])
+            || input.peek(Paren)
+        {
             seq.push(Self::postfix(input)?);
         }
         Ok(Self::Cat(seq))
