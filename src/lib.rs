@@ -2,11 +2,41 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
     Ident,
+    LitChar,
+    LitStr,
     Result,
     Token,
     parse::{Parse, ParseStream},
     parse_macro_input,
 };
+
+#[derive(Debug)]
+enum Atom {
+    Ident(Ident),
+    Str(LitStr),
+    Char(LitChar),
+    Range(LitChar, LitChar),
+}
+
+impl Parse for Atom {
+    fn parse(input: ParseStream) -> Result<Self> {
+        if input.peek(Ident) {
+            Ok(Self::Ident(input.parse::<Ident>()?))
+        } else if input.peek(LitStr) {
+            Ok(Self::Str(input.parse::<LitStr>()?))
+        } else {
+            let start = input.parse::<LitChar>()?;
+            if input.peek(Token![..]) {
+                input.parse::<Token![..]>()?;
+                input.parse::<Token![=]>()?;
+                let end = input.parse::<LitChar>()?;
+                Ok(Self::Range(start, end))
+            } else {
+                Ok(Self::Char(start))
+            }
+        }
+    }
+}
 
 #[derive(Debug)]
 enum Expr {
@@ -23,12 +53,12 @@ enum Expr {
     Neg(Box<Self>),
     Atomic(Box<Self>),
 
-    Call(Ident),
+    Atom(Atom),
 }
 
 impl Expr {
-    fn call(input: ParseStream) -> Result<Self> {
-        Ok(Self::Call(input.parse::<Ident>()?))
+    fn atom(input: ParseStream) -> Result<Self> {
+        Ok(Self::Atom(input.parse::<Atom>()?))
     }
 
     /// Handle prefix operators (!, &, @)
@@ -46,7 +76,7 @@ impl Expr {
             let inner = Self::prefix(input)?;
             Ok(Self::Atomic(Box::new(inner)))
         } else {
-            Self::call(input)
+            Self::atom(input)
         }
     }
 

@@ -7,3 +7,10 @@ fn test() {
     }
     assert!(true);
 }
+
+#[test]
+fn test_atom() {
+    peg! {
+        space = atom | '0' | "0" | '0'..='9'
+    }
+}
