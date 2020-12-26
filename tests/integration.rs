@@ -21,3 +21,10 @@ fn test_paren() {
         crate space -> Option<usize> = r:atom (another | another)
     }
 }
+
+#[test]
+fn test_duplicate_rules() {
+    peg! {
+        x = x y
+    }
+}

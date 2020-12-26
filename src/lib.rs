@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
@@ -21,6 +22,18 @@ enum Atom<Key> {
     Char(LitChar),
     Range(LitChar, LitChar),
     Paren(Box<Expr<Key>>),
+}
+
+impl Atom<Ident> {
+    fn replace_keys(&self, map: &HashMap<Ident, usize>) -> Atom<usize> {
+        match self {
+            Self::Ident(ident) => Atom::Ident(*map.get(ident).expect(&format!("No rule matches the identifier: `{}`", ident))),
+            Self::Str(string) => Atom::Str(string.clone()),
+            Self::Char(character) => Atom::Char(character.clone()),
+            Self::Range(left, right) => Atom::Range(left.clone(), right.clone()),
+            Self::Paren(inner) => Atom::Paren(Box::new(inner.replace_keys(map))),
+        }
+    }
 }
 
 impl Parse for Atom<Ident> {
@@ -136,6 +149,27 @@ impl Expr<Ident> {
         }
         Ok(Self::Cat(seq))
     }
+
+    fn replace_keys(&self, map: &HashMap<Ident, usize>) -> Expr<usize> {
+        match self {
+            Self::Alt(left, right) => Expr::Alt(Box::new(left.replace_keys(map)), Box::new(right.replace_keys(map))),
+            Self::Cat(inner) => Expr::Cat(inner.iter().map(|inner| inner.replace_keys(map)).collect::<Vec<_>>()),
+            
+            // Postfix
+            Self::Many0(inner) => Expr::Many0(Box::new(inner.replace_keys(map))),
+            Self::Many1(inner) => Expr::Many1(Box::new(inner.replace_keys(map))),
+            Self::Optional(inner) => Expr::Optional(Box::new(inner.replace_keys(map))),
+
+            // Prefix
+            Self::Pos(inner) => Expr::Pos(Box::new(inner.replace_keys(map))),
+            Self::Neg(inner) => Expr::Neg(Box::new(inner.replace_keys(map))),
+            Self::Atomic(inner) => Expr::Atomic(Box::new(inner.replace_keys(map))),
+
+            Self::Named(ident, inner) => Expr::Named(ident.clone(), Box::new(inner.replace_keys(map))),
+
+            Self::Atom(atom) => Expr::Atom(atom.replace_keys(map)),
+        }
+    }
 }
 
 impl Parse for Expr<Ident> {
@@ -158,6 +192,18 @@ struct Rule<Key> {
     expr: Expr<Key>,
 
     is_left_rec: bool,
+}
+
+impl Rule<Ident> {
+    fn replace_keys(&self, map: &HashMap<Ident, usize>) -> Rule<usize> {
+        Rule::<usize> {
+            vis:         self.vis.clone(),
+            name:        *map.get(&self.name).expect("The name of a rule never made it into the map."),
+            ty:          self.ty.clone(),
+            expr:        self.expr.replace_keys(map),
+            is_left_rec: self.is_left_rec,
+        }
+    }
 }
 
 impl Parse for Rule<Ident> {
@@ -186,6 +232,28 @@ struct Grammar {
     rules: Vec<Rule<Ident>>,
 }
 
+impl Grammar {
+    fn to_compiler(&self) -> Compiler {
+        use std::collections::HashSet;
+        let mut counter = 0;
+        let mut names = HashSet::new();
+        let mut indices = HashMap::new();
+        let mut reverse = HashMap::new();
+        for (index, rule) in self.rules.iter().enumerate() {
+            if names.contains(&rule.name) {
+                panic!("Two rules with the same name: {}", &rule.name);
+            } else {
+                names.insert(rule.name.clone());
+                indices.insert(counter, rule.name.clone());
+                reverse.insert(rule.name.clone(), counter);
+                counter += 1;
+            }
+        }
+        let rules = self.rules.iter().map(|rule| rule.replace_keys(&reverse)).collect::<Vec<_>>();
+        Compiler { rules, indices }
+    }
+}
+
 impl Parse for Grammar {
     fn parse(input: ParseStream) -> Result<Self> {
         let mut rules = vec![];
@@ -198,11 +266,14 @@ impl Parse for Grammar {
 
 #[derive(Debug)]
 struct Compiler {
-    rules: Vec<()>,
+    rules: Vec<Rule<usize>>,
+    indices: HashMap<usize, Ident>,
 }
 
 #[proc_macro]
 pub fn peg(input: TokenStream) -> TokenStream {
-    parse_macro_input!(input as Grammar);
+    let grammar = parse_macro_input!(input as Grammar);
+    let compiler = grammar.to_compiler();
+    dbg!(compiler);
     quote!().into()
 }
