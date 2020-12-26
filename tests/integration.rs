@@ -18,6 +18,6 @@ fn test_atom() {
 #[test]
 fn test_paren() {
     peg! {
-        space = atom (another | another)
+        space = r:atom (another | another)
     }
 }

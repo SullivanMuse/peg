@@ -61,6 +61,8 @@ enum Expr {
     Neg(Box<Self>),
     Atomic(Box<Self>),
 
+    Named(Ident, Box<Self>),
+
     Atom(Atom),
 }
 
@@ -107,8 +109,20 @@ impl Expr {
         Ok(inner)
     }
 
+    fn named(input: ParseStream) -> Result<Self> {
+        dbg!(input.peek2(Token![:]));
+        if input.peek2(Token![:]) {
+            let name = input.parse::<Ident>()?;
+            input.parse::<Token![:]>()?;
+            let expr = Self::postfix(input)?;
+            Ok(Self::Named(name, Box::new(expr)))
+        } else {
+            Self::postfix(input)
+        }
+    }
+
     fn cat(input: ParseStream) -> Result<Self> {
-        let mut seq = vec![Self::postfix(input)?];
+        let mut seq = vec![Self::named(input)?];
         while input.peek(Ident)
             || input.peek(LitStr)
             || input.peek(LitChar)
@@ -117,7 +131,7 @@ impl Expr {
             || input.peek(Token![&])
             || input.peek(Paren)
         {
-            seq.push(Self::postfix(input)?);
+            seq.push(Self::named(input)?);
         }
         Ok(Self::Cat(seq))
     }
@@ -167,7 +181,6 @@ impl Parse for Grammar {
 
 #[proc_macro]
 pub fn peg(input: TokenStream) -> TokenStream {
-    dbg!(&input);
     dbg!(parse_macro_input!(input as Grammar));
     quote!().into()
 }
