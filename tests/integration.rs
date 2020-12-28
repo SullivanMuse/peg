@@ -54,6 +54,9 @@ fn test_many0() {
     }
     let input = Input::new("1234");
     assert_eq!(y(input), Some((input.advance(4), ())));
+
+    let input = Input::new("");
+    assert_eq!(y(input), Some((input, ())));
 }
 
 #[test]
