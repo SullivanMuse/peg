@@ -71,3 +71,19 @@ fn test_many1() {
     let input = Input::new("");
     assert_eq!(y(input), None);
 }
+
+#[test]
+fn test_optional() {
+    peg! {
+        x = '0'..='9'
+        y = x x?
+    }
+    let input = Input::new("1234");
+    assert_eq!(y(input), Some((input.advance(2), ())));
+
+    let input = Input::new("1");
+    assert_eq!(y(input), Some((input.advance(1), ())));
+
+    let input = Input::new("");
+    assert_eq!(y(input), None);
+}

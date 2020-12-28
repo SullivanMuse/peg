@@ -456,6 +456,14 @@ impl Compiler {
                     Some((input, ()))
                 })())
             }
+            Expr::Optional(inner) => {
+                let inner = self.compile_expr(inner);
+                quote!((||
+                    Some(#inner
+                        .map(|(input, result)| (input, Some(result)))
+                        .unwrap_or((input, None)))
+                )())
+            }
             _ => todo!(),
         }
     }
