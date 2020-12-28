@@ -401,12 +401,17 @@ impl Compiler {
     }
 
     fn compile_expr(&self, expr: &Expr<usize>) -> proc_macro2::TokenStream {
-        dbg!(expr);
         match expr {
             Expr::Atom(atom) => match atom {
                 Atom::Char(char_lit) => quote!((|| {
                     let curr = input.curr();
                     let rest = curr.strip_prefix(#char_lit)?;
+                    let delta = curr.len() - rest.len();
+                    Some((input.advance(delta), ()))
+                })()),
+                Atom::Str(str_lit) => quote!((|| {
+                    let curr = input.curr();
+                    let rest = curr.strip_prefix(#str_lit)?;
                     let delta = curr.len() - rest.len();
                     Some((input.advance(delta), ()))
                 })()),
