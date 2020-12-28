@@ -72,3 +72,9 @@ Try the rule over and over, with recursion depth from 1.., until the parse fails
 - Report refutable bindings
 
 # Todo
+
+- Implement atomic parsing
+- Implement actions for sequences
+- Implement span
+  - Parsing
+  - Compilation
