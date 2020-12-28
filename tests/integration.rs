@@ -87,3 +87,16 @@ fn test_optional() {
     let input = Input::new("");
     assert_eq!(y(input), None);
 }
+
+#[test]
+fn test_pos() {
+    peg! {
+        x = 'a'..='z'
+        y = &x "a1234"
+    }
+    let input = Input::new("a1234");
+    assert_eq!(y(input), Some((input.advance(5), ())));
+
+    let input = Input::new("asdf");
+    assert_eq!(y(input), None);
+}

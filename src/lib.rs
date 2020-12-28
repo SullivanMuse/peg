@@ -464,6 +464,10 @@ impl Compiler {
                         .unwrap_or((input, None)))
                 )())
             }
+            Expr::Pos(inner) => {
+                let inner = self.compile_expr(inner);
+                quote!((|| #inner.map(|(_, result)| (input, result)))())
+            }
             _ => todo!(),
         }
     }
