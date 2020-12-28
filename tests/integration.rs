@@ -135,4 +135,20 @@ fn test_implicit_space_many0() {
     }
     let input = Input::new("12 3 4 5");
     assert_eq!(y(input), Some((input.advance(8), ())));
+
+    let input = Input::new("");
+    assert_eq!(y(input), Some((input, ())));
+}
+
+#[test]
+fn test_implicit_space_many1() {
+    peg! {
+        x = '0'..='9'
+        y = x+
+    }
+    let input = Input::new("12 3 4 5");
+    assert_eq!(y(input), Some((input.advance(8), ())));
+
+    let input = Input::new("");
+    assert_eq!(y(input), None);
 }
