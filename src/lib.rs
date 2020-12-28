@@ -468,6 +468,16 @@ impl Compiler {
                 let inner = self.compile_expr(inner);
                 quote!((|| #inner.map(|(_, result)| (input, result)))())
             }
+            Expr::Neg(inner) => {
+                let inner = self.compile_expr(inner);
+                quote!((|| {
+                    if let Some(_) = #inner {
+                        None
+                    } else {
+                        Some((input, ()))
+                    }
+                })())
+            }
             _ => todo!(),
         }
     }

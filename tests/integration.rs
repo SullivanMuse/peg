@@ -100,3 +100,16 @@ fn test_pos() {
     let input = Input::new("asdf");
     assert_eq!(y(input), None);
 }
+
+#[test]
+fn test_neg() {
+    peg! {
+        x = 'a'..='z'
+        y = !x "1234"
+    }
+    let input = Input::new("1234");
+    assert_eq!(y(input), Some((input.advance(4), ())));
+
+    let input = Input::new("asdf");
+    assert_eq!(y(input), None);
+}
