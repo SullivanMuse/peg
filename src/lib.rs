@@ -238,9 +238,13 @@ impl Grammar {
         let mut names = HashSet::new();
         let mut indices = HashMap::new();
         let mut reverse = HashMap::new();
+        let mut space_defined = false;
         for rule in self.rules.iter() {
             if rule.name.to_string().ends_with("__atomic") {
                 panic!("Rule names may not end with `__atomic`.");
+            }
+            if rule.name.to_string().as_str() == "space" {
+                space_defined = true;
             }
             if names.contains(&rule.name) {
                 panic!("Two rules with the same name: {}", &rule.name);
@@ -252,7 +256,7 @@ impl Grammar {
             }
         }
         let rules = self.rules.iter().map(|rule| rule.replace_keys(&reverse)).collect::<Vec<_>>();
-        Compiler { rules, indices }
+        Compiler { rules, indices, space_defined }
     }
 }
 
@@ -270,6 +274,8 @@ impl Parse for Grammar {
 struct Compiler {
     rules: Vec<Rule<usize>>,
     indices: HashMap<usize, Ident>,
+
+    space_defined: bool,
 }
 
 impl Compiler {
@@ -403,7 +409,7 @@ impl Compiler {
         self.rules.iter_mut().zip(left_recs.into_iter()).for_each(|(rule, rec)| rule.is_left_rec = rec);
     }
 
-    fn compile_expr(&self, expr: &Expr<usize>) -> proc_macro2::TokenStream {
+    fn compile_expr(&self, expr: &Expr<usize>, atomic: bool) -> proc_macro2::TokenStream {
         match expr {
             Expr::Atom(atom) => match atom {
                 Atom::Char(char_lit) => quote!((|| {
@@ -425,22 +431,38 @@ impl Compiler {
                     Some((input.advance(delta), ()))
                 })()),
                 Atom::Ident(key) => {
-                    let ident = self.indices.get(key).unwrap();
+                    let ident = if atomic {
+                        let ident = self.indices.get(key).unwrap();
+                        let name = format!("{}__atomic", ident.to_string());
+                        Ident::new(&name, ident.span())
+                    } else {
+                        self.indices.get(key).unwrap().clone()
+                    };
                     quote!(#ident(input))
                 }
-                Atom::Paren(inner) => self.compile_expr(inner),
+                Atom::Paren(inner) => self.compile_expr(inner, atomic),
             }
             Expr::Cat(inner) => {
                 let mut q = quote!();
+                let mut first = true;
                 for (name, inner) in inner {
                     let name = name.as_ref().map(|name| quote!(#name)).unwrap_or(quote!(_));
-                    let inner = self.compile_expr(inner);
-                    q = quote!(#q; let (input, #name) = #inner?);
+                    let inner = self.compile_expr(inner, atomic);
+                    q = if atomic || first {
+                        first = false;
+                        quote!(#q; let (input, #name) = #inner?)
+                    } else {
+                        quote!(
+                            #q;
+                            let (input, _) = space(input)?;
+                            let (input, #name) = #inner?
+                        )
+                    };
                 }
                 quote!(#q; Some((input, ())))
             }
             Expr::Many0(inner) => {
-                let inner = self.compile_expr(inner);
+                let inner = self.compile_expr(inner, atomic);
                 quote!({
                     let mut input = input;
                     while let Some((input1, _)) = #inner {
@@ -450,7 +472,7 @@ impl Compiler {
                 })
             }
             Expr::Many1(inner) => {
-                let inner = self.compile_expr(inner);
+                let inner = self.compile_expr(inner, atomic);
                 quote!((|| {
                     let (mut input, _) = #inner?;
                     while let Some((input1, _)) = #inner {
@@ -460,7 +482,7 @@ impl Compiler {
                 })())
             }
             Expr::Optional(inner) => {
-                let inner = self.compile_expr(inner);
+                let inner = self.compile_expr(inner, atomic);
                 quote!((||
                     Some(#inner
                         .map(|(input, result)| (input, Some(result)))
@@ -468,11 +490,11 @@ impl Compiler {
                 )())
             }
             Expr::Pos(inner) => {
-                let inner = self.compile_expr(inner);
+                let inner = self.compile_expr(inner, atomic);
                 quote!((|| #inner.map(|(_, result)| (input, result)))())
             }
             Expr::Neg(inner) => {
-                let inner = self.compile_expr(inner);
+                let inner = self.compile_expr(inner, atomic);
                 quote!((|| {
                     if let Some(_) = #inner {
                         None
@@ -485,10 +507,16 @@ impl Compiler {
         }
     }
 
-    fn compile_rule(&self, rule: &Rule<usize>) -> proc_macro2::TokenStream {
+    fn compile_rule(&self, rule: &Rule<usize>, atomic: bool) -> proc_macro2::TokenStream {
         let ret = rule.ty.as_ref().map(|ty| quote!(#ty)).unwrap_or(quote!(()));
-        let ident = self.indices.get(&rule.name).unwrap();
-        let expr = self.compile_expr(&rule.expr);
+        let ident = if atomic {
+            let ident = self.indices.get(&rule.name).unwrap();
+            let name = format!("{}__atomic", ident.to_string());
+            Ident::new(&name, ident.span())
+        } else {
+            self.indices.get(&rule.name).unwrap().clone()
+        };
+        let expr = self.compile_expr(&rule.expr, atomic);
         quote!(
             fn #ident<'a>(input: Input<'a>) -> Option<(Input<'a>, #ret)> {
                 #expr
@@ -521,10 +549,27 @@ impl Compiler {
             }
         );
 
+        if !self.space_defined {
+            q = quote!(
+                #q
+                fn space<'a>(input: Input<'a>) -> Option<(Input<'a>, ())> {
+                    let curr = input.curr();
+                    let mut rest = curr;
+                    while let Some(rest1) = rest.strip_prefix(|c:char| c.is_whitespace()) {
+                        rest = rest1;
+                    }
+                    let delta = curr.len() - rest.len();
+                    let input = input.advance(delta);
+                    Some((input, ()))
+                }
+            );
+        }
+
         for rule in &self.rules {
             let name = self.indices.get(&rule.name).unwrap();
-            let rule = self.compile_rule(rule);
-            q = quote!(#q #rule)
+            let rule_atomic = self.compile_rule(rule, true);
+            let rule = self.compile_rule(rule, false);
+            q = quote!(#q #rule #rule_atomic);
         }
         q
     }

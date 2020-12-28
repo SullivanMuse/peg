@@ -113,3 +113,16 @@ fn test_neg() {
     let input = Input::new("asdf");
     assert_eq!(y(input), None);
 }
+
+#[test]
+fn test_implicit_space() {
+    peg! {
+        x = '0'..='9'
+        y = x x x x
+    }
+    let input = Input::new("12 34");
+    assert_eq!(y(input), Some((input.advance(5), ())));
+
+    let input = Input::new("1 2 3 4 5");
+    assert_eq!(y(input), Some((input.advance(7), ())));
+}
