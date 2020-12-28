@@ -126,3 +126,13 @@ fn test_implicit_space() {
     let input = Input::new("1 2 3 4 5");
     assert_eq!(y(input), Some((input.advance(7), ())));
 }
+
+#[test]
+fn test_implicit_space_many0() {
+    peg! {
+        x = '0'..='9'
+        y = x*
+    }
+    let input = Input::new("12 3 4 5");
+    assert_eq!(y(input), Some((input.advance(8), ())));
+}

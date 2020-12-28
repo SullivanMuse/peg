@@ -463,13 +463,30 @@ impl Compiler {
             }
             Expr::Many0(inner) => {
                 let inner = self.compile_expr(inner, atomic);
-                quote!({
-                    let mut input = input;
-                    while let Some((input1, _)) = #inner {
-                        input = input1;
-                    }
-                    Some((input, ()))
-                })
+                if !atomic {
+                    quote!({
+                        if let Some((mut input, _)) = #inner {
+                            while let Some((input1, _)) = (|input: Input<'a>| {
+                                let (input, _) = space(input)?;
+                                let (input, _) = #inner?;
+                                Some((input, ()))
+                            })(input) {
+                                input = input1;
+                            }
+                            Some((input, ()))
+                        } else {
+                            Some((input, ()))
+                        }
+                    })
+                } else {
+                    quote!({
+                        let mut input = input;
+                        while let Some((input1, _)) = #inner {
+                            input = input1;
+                        }
+                        Some((input, ()))
+                    })
+                }
             }
             Expr::Many1(inner) => {
                 let inner = self.compile_expr(inner, atomic);
