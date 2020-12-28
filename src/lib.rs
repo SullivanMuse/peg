@@ -608,7 +608,6 @@ impl Compiler {
         }
 
         for rule in &self.rules {
-            let name = self.indices.get(&rule.name).unwrap();
             let rule_atomic = self.compile_rule(rule, true);
             let rule = self.compile_rule(rule, false);
             q = quote!(#q #rule #rule_atomic);
