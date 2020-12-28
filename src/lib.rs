@@ -415,6 +415,12 @@ impl Compiler {
                     let delta = curr.len() - rest.len();
                     Some((input.advance(delta), ()))
                 })()),
+                Atom::Range(start, end) => quote!((|| {
+                    let curr = input.curr();
+                    let rest = curr.strip_prefix(|c: char| (#start..=#end).contains(&c))?;
+                    let delta = curr.len() - rest.len();
+                    Some((input.advance(delta), ()))
+                })()),
                 _ => todo!(),
             }
             Expr::Cat(inner) => {
