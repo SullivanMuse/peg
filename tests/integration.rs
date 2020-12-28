@@ -201,6 +201,5 @@ fn test_left_rec() {
 
     let s = "1 2 3";
     let input = Input::new(s);
-    let span = Span::new(s, 0, 5);
     assert_eq!(y(input), Some((input.advance(5), ())));
 }

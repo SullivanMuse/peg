@@ -428,7 +428,7 @@ impl Compiler {
         self.rules.iter_mut().zip(left_recs.into_iter()).for_each(|(rule, rec)| rule.is_left_rec = rec);
     }
 
-    fn compile_expr(&self, expr: &Expr<usize>, atomic: bool) -> proc_macro2::TokenStream {
+    fn compile_expr(&self, expr: &Expr<usize>, atomic: bool, left_rec: Option<usize>) -> proc_macro2::TokenStream {
         match expr {
             Expr::Atom(atom) => match atom {
                 Atom::Char(char_lit) => quote!((|| {
@@ -449,24 +449,26 @@ impl Compiler {
                     let delta = curr.len() - rest.len();
                     Some((input.advance(delta), ()))
                 })()),
-                Atom::Ident(key) => {
-                    let ident = if atomic {
+                Atom::Ident(key) => match left_rec {
+                    Some(key1) if *key == key1 => quote!((self.parse(depth - 1, input))),
+                    _ => if atomic {
                         let ident = self.indices.get(key).unwrap();
                         let name = format!("{}_atomic", ident.to_string());
-                        Ident::new(&name, ident.span())
+                        let ident = Ident::new(&name, ident.span());
+                        quote!(#ident(input))
                     } else {
-                        self.indices.get(key).unwrap().clone()
-                    };
-                    quote!(#ident(input))
+                        let ident = self.indices.get(key).unwrap();
+                        quote!(#ident(input))
+                    }
                 }
-                Atom::Paren(inner) => self.compile_expr(inner, atomic),
+                Atom::Paren(inner) => self.compile_expr(inner, atomic, left_rec),
             }
             Expr::Cat(inner, action) => {
                 let mut q = quote!();
                 let mut first = true;
                 for (name, inner) in inner {
                     let name = name.as_ref().map(|name| quote!(#name)).unwrap_or(quote!(_));
-                    let inner = self.compile_expr(inner, atomic);
+                    let inner = self.compile_expr(inner, atomic, left_rec);
                     q = if atomic || first {
                         first = false;
                         quote!(#q; let (input, #name) = #inner?)
@@ -479,10 +481,10 @@ impl Compiler {
                     };
                 }
                 let action = action.as_ref().map(|action| quote!(#action)).unwrap_or(quote!(()));
-                quote!(#q; Some((input, #action)))
+                quote!((||{#q; Some((input, #action))})())
             }
             Expr::Many0(inner) => {
-                let inner = self.compile_expr(inner, atomic);
+                let inner = self.compile_expr(inner, atomic, left_rec);
                 if !atomic {
                     quote!({
                         if let Some((mut input, _)) = #inner {
@@ -509,7 +511,7 @@ impl Compiler {
                 }
             }
             Expr::Many1(inner) => {
-                let inner = self.compile_expr(inner, atomic);
+                let inner = self.compile_expr(inner, atomic, left_rec);
                 if !atomic {
                     quote!((|| {
                         let (mut input, _) = #inner?;
@@ -533,7 +535,7 @@ impl Compiler {
                 }
             }
             Expr::Optional(inner) => {
-                let inner = self.compile_expr(inner, atomic);
+                let inner = self.compile_expr(inner, atomic, left_rec);
                 quote!((||
                     Some(#inner
                         .map(|(input, result)| (input, Some(result)))
@@ -541,11 +543,11 @@ impl Compiler {
                 )())
             }
             Expr::Pos(inner) => {
-                let inner = self.compile_expr(inner, atomic);
+                let inner = self.compile_expr(inner, atomic, left_rec);
                 quote!((|| #inner.map(|(_, result)| (input, result)))())
             }
             Expr::Neg(inner) => {
-                let inner = self.compile_expr(inner, atomic);
+                let inner = self.compile_expr(inner, atomic, left_rec);
                 quote!((|| {
                     if let Some(_) = #inner {
                         None
@@ -554,9 +556,9 @@ impl Compiler {
                     }
                 })())
             }
-            Expr::Atomic(inner) => self.compile_expr(inner, true),
+            Expr::Atomic(inner) => self.compile_expr(inner, true, left_rec),
             Expr::Span(inner) => {
-                let inner = self.compile_expr(inner, atomic);
+                let inner = self.compile_expr(inner, atomic, left_rec);
                 quote!((||{
                     let start = input.index;
                     let (input, result) = #inner?;
@@ -564,7 +566,11 @@ impl Compiler {
                     Some((input, (span, result)))
                 })())
             }
-            _ => todo!(),
+            Expr::Alt(left, right) => {
+                let left = self.compile_expr(left, atomic, left_rec);
+                let right = self.compile_expr(right, atomic, left_rec);
+                quote!((#left).or_else(|| (#right)))
+            }
         }
     }
 
@@ -577,9 +583,80 @@ impl Compiler {
         } else {
             self.indices.get(&rule.name).unwrap().clone()
         };
-        let expr = self.compile_expr(&rule.expr, atomic);
+        let left_rec = if rule.is_left_rec {
+            Some(rule.name)
+        } else {
+            None
+        };
+        let expr = self.compile_expr(&rule.expr, atomic, left_rec);
         if rule.is_left_rec {
-            todo!()
+            // The following code implements a runtime for well-defined left-recursion as detailed in the following paper: https://arxiv.org/pdf/1207.0443.pdf
+            quote!(
+                fn #ident<'a>(input: Input<'a>) -> Option<(Input<'a>, #ret)> {
+                    use std::collections::HashMap;
+                    struct Cache<'a> {
+                        map: HashMap<
+                            (usize, usize),
+                            Option<(Input<'a>, #ret)>,
+                        >,
+                    }
+                
+                    impl<'a> Cache<'a> {
+                        fn parse(
+                            &mut self,
+                            depth: usize,
+                            input: Input<'a>,
+                        )
+                            -> Option<(Input<'a>, #ret)>
+                        {
+                            if depth == 0 {
+                                None
+                            } else {
+                                match self.map.get(&(depth, input.index)) {
+                                    Some(value) => value.clone(),
+                                    None => {
+                                        let result = {
+                                            #expr
+                                        };
+                                        dbg!("Here");
+                                        dbg!(&result);
+                                        self.map.insert((depth, input.index), result);
+                                        self.map.get(&(depth, input.index)).unwrap().clone()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                
+                    let mut cache = Cache {
+                        map: HashMap::new(),
+                    };
+
+                    let mut max_position = None;
+                
+                    let mut result = None;
+                
+                    for depth in 1.. {
+                        match cache.parse(depth, input) {
+                            None => break,
+                            Some((input, r)) => match max_position {
+                                Some(pos) => if pos > input.index {
+                                    break
+                                } else {
+                                    max_position = Some(input.index);
+                                    result = Some((input, r));
+                                }
+                                None => {
+                                    max_position = Some(input.index);
+                                    result = Some((input, r));
+                                }
+                            }
+                        }
+                    }
+                
+                    result
+                }
+            )
         } else {
             quote!(
                 fn #ident<'a>(input: Input<'a>) -> Option<(Input<'a>, #ret)> {
