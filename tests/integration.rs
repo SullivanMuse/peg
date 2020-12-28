@@ -191,3 +191,16 @@ fn test_span() {
     assert_eq!(y(input), Some((input.advance(8), ())));
     assert_eq!(z(input), Some((input.advance(8), span)));
 }
+
+#[test]
+fn test_left_rec() {
+    peg! {
+        x = '0'..='9'
+        y = y x | x
+    }
+
+    let s = "1 2 3";
+    let input = Input::new(s);
+    let span = Span::new(s, 0, 5);
+    assert_eq!(y(input), Some((input.advance(5), ())));
+}

@@ -578,19 +578,19 @@ impl Compiler {
             self.indices.get(&rule.name).unwrap().clone()
         };
         let expr = self.compile_expr(&rule.expr, atomic);
-        quote!(
-            fn #ident<'a>(input: Input<'a>) -> Option<(Input<'a>, #ret)> {
-                #expr
-            }
-        )
+        if rule.is_left_rec {
+            todo!()
+        } else {
+            quote!(
+                fn #ident<'a>(input: Input<'a>) -> Option<(Input<'a>, #ret)> {
+                    #expr
+                }
+            )
+        }
     }
 
     fn compile(&mut self) -> proc_macro2::TokenStream {
         self.left_rec();
-
-        if self.rules.iter().any(|rule| rule.is_left_rec) {
-            panic!("Left recursion is not yet supported.");
-        }
 
         let mut q = quote!(
             #[derive(Clone, Copy, Debug, PartialEq)]
@@ -702,17 +702,6 @@ mod test {
         let mut compiler = grammar.to_compiler();
         compiler.left_rec();
         assert!(!compiler.rules.iter().any(|rule| rule.is_left_rec));
-    }
-
-    #[test]
-    #[should_panic(expected = "Left recursion is not yet supported.")]
-    fn test_left_rec_warning() {
-        let grammar = parse_str::<Grammar>("
-            x = x y
-            y = y x
-        ").unwrap();
-        let mut compiler = grammar.to_compiler();
-        compiler.compile();
     }
 
     #[test]
