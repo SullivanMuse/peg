@@ -8,19 +8,17 @@ A rust macro for generating PEG parsers.
   - strs `"Hello"`
   - chars `'c'`
   - char ranges `'0'..='9'`
+- Atomic `atomic e`
+- Named `name: e`
+- Lookahead
+  - Positive lookahead `&e`
+  - Negative lookahead `!e`
 - Sequence `e e`
 - Alternation `e | e`
-- Atomicity
-  - Atomic `atomic e`
-  - Non-atomic `non_atomic e`
-- Lookahead
-  - Negative lookahead `!e`
-  - Positive lookahead `&e`
-- Case sensitivity
-  - Insensitive `insensitive e`
-  - Sensitive `sensitive e`
-- Stack manipulation
-  - 
+- Number
+  - Many 0 (zero or more) `e*`
+  - Many 1 (one or more) `e+`
+  - Optional (zero or one) `e?`
 
 # Predefined rules
 
