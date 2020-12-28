@@ -152,3 +152,15 @@ fn test_implicit_space_many1() {
     let input = Input::new("");
     assert_eq!(y(input), None);
 }
+
+#[test]
+fn test_atomic() {
+    peg! {
+        x = '0'..='9'
+        y = x+
+        z = @y
+    }
+    let input = Input::new("12 3 4 5");
+    assert_eq!(y(input), Some((input.advance(8), ())));
+    assert_eq!(z(input), Some((input.advance(2), ())));
+}

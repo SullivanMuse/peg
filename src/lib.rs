@@ -534,6 +534,7 @@ impl Compiler {
                     }
                 })())
             }
+            Expr::Atomic(inner) => self.compile_expr(inner, true),
             _ => todo!(),
         }
     }

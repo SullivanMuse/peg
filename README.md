@@ -73,7 +73,6 @@ Try the rule over and over, with recursion depth from 1.., until the parse fails
 
 # Todo
 
-- Implement atomic parsing
 - Implement actions for sequences
 - Implement span
   - Parsing
