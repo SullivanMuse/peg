@@ -73,9 +73,6 @@ Try the rule over and over, with recursion depth from 1.., until the parse fails
 
 # Todo
 
-- Implement actions for sequences
-  - Parsing
-  - Compilation
 - Implement span
   - Parsing
   - Compilation

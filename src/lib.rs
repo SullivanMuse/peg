@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
+    Block,
     Ident,
     LitChar,
     LitStr,
@@ -13,7 +14,10 @@ use syn::{
     },
     Result,
     Token,
-    token::Paren,
+    token::{
+        Brace,
+        Paren,
+    },
     Type,
     Visibility,
 };
@@ -67,7 +71,7 @@ impl Parse for Atom<Ident> {
 #[derive(Debug, PartialEq, Eq)]
 enum Expr<Key> {
     Alt(Box<Self>, Box<Self>),
-    Cat(Vec<(Option<Ident>, Self)>),
+    Cat(Vec<(Option<Ident>, Self)>, Option<Block>),
 
     // Postfix
     Many0(Box<Self>),
@@ -148,13 +152,18 @@ impl Expr<Ident> {
         {
             seq.push(Self::named(input)?);
         }
-        Ok(Self::Cat(seq))
+        let action = if input.peek(Brace) {
+            Some(input.parse::<Block>()?)
+        } else {
+            None
+        };
+        Ok(Self::Cat(seq, action))
     }
 
     fn replace_keys(&self, map: &HashMap<Ident, usize>) -> Expr<usize> {
         match self {
             Self::Alt(left, right) => Expr::Alt(Box::new(left.replace_keys(map)), Box::new(right.replace_keys(map))),
-            Self::Cat(inner) => Expr::Cat(inner.iter().map(|(name, inner)| (name.clone(), inner.replace_keys(map))).collect::<Vec<_>>()),
+            Self::Cat(inner, action) => Expr::Cat(inner.iter().map(|(name, inner)| (name.clone(), inner.replace_keys(map))).collect::<Vec<_>>(), action.clone()),
             
             // Postfix
             Self::Many0(inner) => Expr::Many0(Box::new(inner.replace_keys(map))),
@@ -306,7 +315,7 @@ impl Compiler {
                         || self.transparent(right),
                     
                     // Concatenation may consume no input if all rules may consume no input
-                    Expr::Cat(inner) => inner.iter().all(|(_, inner)| self.transparent(inner)),
+                    Expr::Cat(inner, _) => inner.iter().all(|(_, inner)| self.transparent(inner)),
                     
                     // The following may consume no input if the inner parser may consume no input
                     Expr::Many1(inner) => self.transparent(inner),
@@ -350,7 +359,7 @@ impl Compiler {
                         || self.left_rec_expr(right),
                     
                     // A concatenation is left recursive if any of the possible starts of the concatenation are left recursive
-                    Expr::Cat(inner) => {
+                    Expr::Cat(inner, _) => {
                         for (_, inner) in inner {
                             if self.left_rec_expr(inner) {
                                 return true
@@ -442,7 +451,7 @@ impl Compiler {
                 }
                 Atom::Paren(inner) => self.compile_expr(inner, atomic),
             }
-            Expr::Cat(inner) => {
+            Expr::Cat(inner, action) => {
                 let mut q = quote!();
                 let mut first = true;
                 for (name, inner) in inner {
@@ -459,7 +468,8 @@ impl Compiler {
                         )
                     };
                 }
-                quote!(#q; Some((input, ())))
+                let action = action.as_ref().map(|action| quote!(#action)).unwrap_or(quote!(()));
+                quote!(#q; Some((input, #action)))
             }
             Expr::Many0(inner) => {
                 let inner = self.compile_expr(inner, atomic);

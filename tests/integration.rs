@@ -164,3 +164,15 @@ fn test_atomic() {
     assert_eq!(y(input), Some((input.advance(8), ())));
     assert_eq!(z(input), Some((input.advance(2), ())));
 }
+
+#[test]
+fn test_action() {
+    peg! {
+        x = '0'..='9'
+        y = x+
+        z -> ((), ()) = r: y { (r, r) }
+    }
+    let input = Input::new("12 3 4 5");
+    assert_eq!(y(input), Some((input.advance(8), ())));
+    assert_eq!(z(input), Some((input.advance(8), ((), ()))));
+}
