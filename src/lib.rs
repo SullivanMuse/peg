@@ -239,6 +239,9 @@ impl Grammar {
         let mut indices = HashMap::new();
         let mut reverse = HashMap::new();
         for rule in self.rules.iter() {
+            if rule.name.to_string().ends_with("__atomic") {
+                panic!("Rule names may not end with `__atomic`.");
+            }
             if names.contains(&rule.name) {
                 panic!("Two rules with the same name: {}", &rule.name);
             } else {
@@ -575,5 +578,13 @@ mod test {
         let mut compiler = grammar.to_compiler();
         compiler.left_rec();
         assert!(!compiler.rules.iter().any(|rule| rule.is_left_rec));
+    }
+
+    #[test]
+    #[should_panic(expected = "Rule names may not end with `__atomic`.")]
+    fn test_does_not_end_with_atomic() {
+        parse_str::<Grammar>("x__atomic = 'x'")
+            .unwrap()
+            .to_compiler();
     }
 }
