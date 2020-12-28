@@ -67,7 +67,7 @@ impl Parse for Atom<Ident> {
 #[derive(Debug, PartialEq, Eq)]
 enum Expr<Key> {
     Alt(Box<Self>, Box<Self>),
-    Cat(Vec<Self>),
+    Cat(Vec<(Option<Ident>, Self)>),
 
     // Postfix
     Many0(Box<Self>),
@@ -78,8 +78,6 @@ enum Expr<Key> {
     Pos(Box<Self>),
     Neg(Box<Self>),
     Atomic(Box<Self>),
-
-    Named(Ident, Box<Self>),
 
     Atom(Atom<Key>),
 }
@@ -127,14 +125,14 @@ impl Expr<Ident> {
         Ok(inner)
     }
 
-    fn named(input: ParseStream) -> Result<Self> {
+    fn named(input: ParseStream) -> Result<(Option<Ident>, Self)> {
         if input.peek2(Token![:]) {
             let name = input.parse::<Ident>()?;
             input.parse::<Token![:]>()?;
             let expr = Self::postfix(input)?;
-            Ok(Self::Named(name, Box::new(expr)))
+            Ok((Some(name), expr))
         } else {
-            Self::postfix(input)
+            Ok((None, Self::postfix(input)?))
         }
     }
 
@@ -156,7 +154,7 @@ impl Expr<Ident> {
     fn replace_keys(&self, map: &HashMap<Ident, usize>) -> Expr<usize> {
         match self {
             Self::Alt(left, right) => Expr::Alt(Box::new(left.replace_keys(map)), Box::new(right.replace_keys(map))),
-            Self::Cat(inner) => Expr::Cat(inner.iter().map(|inner| inner.replace_keys(map)).collect::<Vec<_>>()),
+            Self::Cat(inner) => Expr::Cat(inner.iter().map(|(name, inner)| (name.clone(), inner.replace_keys(map))).collect::<Vec<_>>()),
             
             // Postfix
             Self::Many0(inner) => Expr::Many0(Box::new(inner.replace_keys(map))),
@@ -167,8 +165,6 @@ impl Expr<Ident> {
             Self::Pos(inner) => Expr::Pos(Box::new(inner.replace_keys(map))),
             Self::Neg(inner) => Expr::Neg(Box::new(inner.replace_keys(map))),
             Self::Atomic(inner) => Expr::Atomic(Box::new(inner.replace_keys(map))),
-
-            Self::Named(ident, inner) => Expr::Named(ident.clone(), Box::new(inner.replace_keys(map))),
 
             Self::Atom(atom) => Expr::Atom(atom.replace_keys(map)),
         }
@@ -301,12 +297,11 @@ impl Compiler {
                         || self.transparent(right),
                     
                     // Concatenation may consume no input if all rules may consume no input
-                    Expr::Cat(inner) => inner.iter().all(|inner| self.transparent(inner)),
+                    Expr::Cat(inner) => inner.iter().all(|(_, inner)| self.transparent(inner)),
                     
                     // The following may consume no input if the inner parser may consume no input
                     Expr::Many1(inner) => self.transparent(inner),
                     Expr::Atomic(inner) => self.transparent(inner),
-                    Expr::Named(_, inner) => self.transparent(inner),
                     
                     // The following may consume no input unconditionally
                     Expr::Many0(_)
@@ -347,7 +342,7 @@ impl Compiler {
                     
                     // A concatenation is left recursive if any of the possible starts of the concatenation are left recursive
                     Expr::Cat(inner) => {
-                        for inner in inner {
+                        for (_, inner) in inner {
                             if self.left_rec_expr(inner) {
                                 return true
                             } else if !self.transparent(inner) {
@@ -363,8 +358,7 @@ impl Compiler {
                     | Expr::Pos(inner)
                     | Expr::Neg(inner)
                     | Expr::Atomic(inner) // TODO: Fix for implicit spaces
-                    | Expr::Many0(inner)
-                    | Expr::Named(_, inner) => self.left_rec_expr(inner),
+                    | Expr::Many0(inner) => self.left_rec_expr(inner),
     
                     // Atoms MAY be left recursive
                     Expr::Atom(atom) => match atom {
