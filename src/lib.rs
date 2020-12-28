@@ -291,6 +291,7 @@ impl<'a, 'b, T> PartialEq<RefEq<'b, T>> for RefEq<'a, T> {
 
 /// Determine if a rule is left recursive
 fn left_rec(rules: &Vec<Rule<usize>>, rule: usize) -> bool {
+    /// Helper structure
     struct Checker<'a> {
         // Basic info
         rules: &'a Vec<Rule<usize>>,
@@ -347,6 +348,7 @@ fn left_rec(rules: &Vec<Rule<usize>>, rule: usize) -> bool {
             result
         }
 
+        /// Returns whether or not an expression is left recursive directly
         fn left_rec_expr(&mut self, expr: &'a Expr<usize>) -> bool {
             let ref_eq = RefEq(expr);
             if let Some(result) = self.left_rec_expr_map.get(&ref_eq) {
@@ -404,7 +406,12 @@ fn left_rec(rules: &Vec<Rule<usize>>, rule: usize) -> bool {
     }
 
     let expr = &rules.get(rule).unwrap().expr;
-    Checker { rules, rule, transparent_map: HashMap::new(), left_rec_expr_map: HashMap::new() }.left_rec_expr(expr)
+    Checker {
+        rules,
+        rule,
+        transparent_map: HashMap::new(),
+        left_rec_expr_map: HashMap::new(),
+    }.left_rec_expr(expr)
 }
 
 #[proc_macro]
