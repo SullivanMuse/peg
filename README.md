@@ -69,3 +69,7 @@ Try the rule over and over, with recursion depth from 1.., until the parse fails
 - Detect overwriting of built-in rules
 - Mark left-recursive rules
 - Report refutable bindings
+
+# Todo
+
+- Integrate Expr::Named into Expr::Cat
