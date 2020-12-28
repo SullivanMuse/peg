@@ -425,7 +425,7 @@ impl Compiler {
                     let ident = self.indices.get(key).unwrap();
                     quote!(#ident(input))
                 }
-                _ => todo!(),
+                Atom::Paren(inner) => self.compile_expr(inner),
             }
             Expr::Cat(inner) => {
                 let mut q = quote!();
