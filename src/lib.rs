@@ -800,4 +800,18 @@ mod test {
             _ => assert!(false),
         }
     }
+
+    #[test]
+    fn test_left_rec_precision() {
+        let grammar = parse_str::<Grammar>("
+            x = '0'..='9'
+            y -> (Span<'a>, ()) = r: $(y x | x) { r }
+            z -> (Span<'a>, ()) = r: y { r }
+        ").unwrap();
+        let mut compiler = grammar.to_compiler();
+        compiler.left_rec();
+        assert!(!compiler.rules[0].is_left_rec);
+        assert!(compiler.rules[1].is_left_rec);
+        assert!(!compiler.rules[2].is_left_rec);
+    }
 }
