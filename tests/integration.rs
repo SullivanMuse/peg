@@ -55,3 +55,16 @@ fn test_many0() {
     let input = Input::new("1234");
     assert_eq!(y(input), Some((input.advance(4), ())));
 }
+
+#[test]
+fn test_many1() {
+    peg! {
+        x = '0'..='9'
+        y = x+
+    }
+    let input = Input::new("1234");
+    assert_eq!(y(input), Some((input.advance(4), ())));
+
+    let input = Input::new("");
+    assert_eq!(y(input), None);
+}
