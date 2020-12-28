@@ -72,6 +72,3 @@ Try the rule over and over, with recursion depth from 1.., until the parse fails
 - Report refutable bindings
 
 # Todo
-
-- Implement span
-  - Compilation

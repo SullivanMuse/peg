@@ -555,6 +555,15 @@ impl Compiler {
                 })())
             }
             Expr::Atomic(inner) => self.compile_expr(inner, true),
+            Expr::Span(inner) => {
+                let inner = self.compile_expr(inner, atomic);
+                quote!((||{
+                    let start = input.index;
+                    let (input, result) = #inner?;
+                    let span = Span::new(input.string, start, input.index);
+                    Some((input, (span, result)))
+                })())
+            }
             _ => todo!(),
         }
     }
@@ -597,6 +606,19 @@ impl Compiler {
 
                 fn curr(&self) -> &str {
                     self.string.get(self.index..).unwrap_or("")
+                }
+            }
+
+            #[derive(Clone, Copy, Debug, PartialEq)]
+            struct Span<'a> {
+                string: &'a str,
+                start: usize,
+                end: usize,
+            }
+
+            impl<'a> Span<'a> {
+                fn new(string: &'a str, start: usize, end: usize) -> Self {
+                    Self { string, start, end }
                 }
             }
         );

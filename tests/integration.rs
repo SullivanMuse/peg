@@ -176,3 +176,18 @@ fn test_action() {
     assert_eq!(y(input), Some((input.advance(8), ())));
     assert_eq!(z(input), Some((input.advance(8), ((), ()))));
 }
+
+#[test]
+fn test_span() {
+    peg! {
+        x = '0'..='9'
+        y = x+
+        z -> Span<'a> = r: $y { r.0 }
+    }
+    
+    let s = "12 3 4 5";
+    let input = Input::new(s);
+    let span = Span::new(s, 0, s.len());
+    assert_eq!(y(input), Some((input.advance(8), ())));
+    assert_eq!(z(input), Some((input.advance(8), span)));
+}
