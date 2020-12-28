@@ -312,7 +312,7 @@ impl Compiler {
             /// Returns whether or not a rule can consume no input
             fn transparent(&mut self, expr: &'a Expr<usize>) -> bool {
                 let ref_eq = RefEq(expr);
-                if let Some(result) = self.left_rec_expr_map.get(&ref_eq) {
+                if let Some(result) = self.transparent_map.get(&ref_eq) {
                     return *result
                 }
                 let result = match expr {
@@ -350,7 +350,7 @@ impl Compiler {
                         _ => false,
                     }
                 };
-                self.left_rec_expr_map.insert(ref_eq, result);
+                self.transparent_map.insert(ref_eq, result);
                 result
             }
     
@@ -585,7 +585,13 @@ impl Compiler {
         )
     }
 
-    fn compile(&self) -> proc_macro2::TokenStream {
+    fn compile(&mut self) -> proc_macro2::TokenStream {
+        self.left_rec();
+
+        if self.rules.iter().any(|rule| rule.is_left_rec) {
+            panic!("Left recursion is not yet supported.");
+        }
+
         let mut q = quote!(
             #[derive(Clone, Copy, Debug, PartialEq)]
             struct Input<'a> {
@@ -670,7 +676,7 @@ impl<'a, 'b, T> PartialEq<RefEq<'b, T>> for RefEq<'a, T> {
 #[proc_macro]
 pub fn peg(input: TokenStream) -> TokenStream {
     let grammar = parse_macro_input!(input as Grammar);
-    let compiler = grammar.to_compiler();
+    let mut compiler = grammar.to_compiler();
     compiler.compile().into()
 }
 
@@ -696,6 +702,17 @@ mod test {
         let mut compiler = grammar.to_compiler();
         compiler.left_rec();
         assert!(!compiler.rules.iter().any(|rule| rule.is_left_rec));
+    }
+
+    #[test]
+    #[should_panic(expected = "Left recursion is not yet supported.")]
+    fn test_left_rec_warning() {
+        let grammar = parse_str::<Grammar>("
+            x = x y
+            y = y x
+        ").unwrap();
+        let mut compiler = grammar.to_compiler();
+        compiler.compile();
     }
 
     #[test]
