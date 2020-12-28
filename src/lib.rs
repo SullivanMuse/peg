@@ -5,14 +5,17 @@ use syn::{
     Ident,
     LitChar,
     LitStr,
-    Result,
-    Type,
-    Token,
-    Visibility,
-    token::Paren,
     parenthesized,
-    parse::{Parse, ParseStream},
     parse_macro_input,
+    parse::{
+        Parse,
+        ParseStream,
+    },
+    Result,
+    Token,
+    token::Paren,
+    Type,
+    Visibility,
 };
 
 #[derive(Debug, PartialEq, Eq)]
