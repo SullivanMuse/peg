@@ -36,3 +36,12 @@ fn test_call() {
     let input = Input::new("1234");
     assert_eq!(y(input), Some((input.advance(1), ())));
 }
+
+#[test]
+fn test_cat() {
+    peg! {
+        x = '0' '1'
+    }
+    let input = Input::new("0101");
+    assert_eq!(x(input), Some((input.advance(2), ())));
+}
