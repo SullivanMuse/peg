@@ -399,6 +399,75 @@ impl Compiler {
 
         self.rules.iter_mut().zip(left_recs.into_iter()).for_each(|(rule, rec)| rule.is_left_rec = rec);
     }
+
+    fn compile_expr(&self, expr: &Expr<usize>) -> proc_macro2::TokenStream {
+        dbg!(expr);
+        match expr {
+            Expr::Atom(atom) => match atom {
+                Atom::Char(char_lit) => quote!((|| {
+                    let curr = input.curr();
+                    let rest = curr.strip_prefix(#char_lit)?;
+                    let delta = curr.len() - rest.len();
+                    Some((input.advance(delta), ()))
+                })()),
+                _ => todo!(),
+            }
+            Expr::Cat(inner) => {
+                let mut q = quote!();
+                for (name, inner) in inner {
+                    let name = name.as_ref().map(|name| quote!(#name)).unwrap_or(quote!(_));
+                    let inner = self.compile_expr(inner);
+                    q = quote!(#q; let (input, #name) = #inner?);
+                }
+                quote!(#q; Some((input, ())))
+            }
+            _ => todo!(),
+        }
+    }
+
+    fn compile_rule(&self, rule: &Rule<usize>) -> proc_macro2::TokenStream {
+        let ret = rule.ty.as_ref().map(|ty| quote!(#ty)).unwrap_or(quote!(()));
+        let ident = self.indices.get(&rule.name).unwrap();
+        let expr = self.compile_expr(&rule.expr);
+        quote!(
+            fn #ident<'a>(input: Input<'a>) -> Option<(Input<'a>, #ret)> {
+                #expr
+            }
+        )
+    }
+
+    fn compile(&self) -> proc_macro2::TokenStream {
+        let mut q = quote!(
+            #[derive(Clone, Copy, Debug, PartialEq)]
+            struct Input<'a> {
+                string: &'a str,
+                index: usize,
+            }
+
+            impl<'a> Input<'a> {
+                fn new(string: &'a str) -> Self {
+                    Self { string, index: 0 }
+                }
+
+                fn advance(&self, delta: usize) -> Self {
+                    let mut input = *self;
+                    input.index += delta;
+                    input
+                }
+
+                fn curr(&self) -> &str {
+                    self.string.get(self.index..).unwrap_or("")
+                }
+            }
+        );
+
+        for rule in &self.rules {
+            let name = self.indices.get(&rule.name).unwrap();
+            let rule = self.compile_rule(rule);
+            q = quote!(#q #rule)
+        }
+        q
+    }
 }
 
 /// A structure that treats references as equal. Used for memoization in the left_rec checker
@@ -424,8 +493,7 @@ impl<'a, 'b, T> PartialEq<RefEq<'b, T>> for RefEq<'a, T> {
 pub fn peg(input: TokenStream) -> TokenStream {
     let grammar = parse_macro_input!(input as Grammar);
     let compiler = grammar.to_compiler();
-    dbg!(compiler);
-    quote!().into()
+    compiler.compile().into()
 }
 
 #[cfg(test)]
