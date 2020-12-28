@@ -45,3 +45,13 @@ fn test_cat() {
     let input = Input::new("0101");
     assert_eq!(x(input), Some((input.advance(2), ())));
 }
+
+#[test]
+fn test_many0() {
+    peg! {
+        x = '0'..='9'
+        y = x*
+    }
+    let input = Input::new("1234");
+    assert_eq!(y(input), Some((input.advance(4), ())));
+}

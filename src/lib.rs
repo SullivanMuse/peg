@@ -436,6 +436,16 @@ impl Compiler {
                 }
                 quote!(#q; Some((input, ())))
             }
+            Expr::Many0(inner) => {
+                let inner = self.compile_expr(inner);
+                quote!({
+                    let mut input = input;
+                    while let Some((input1, _)) = #inner {
+                        input = input1;
+                    }
+                    Some((input, ()))
+                })
+            }
             _ => todo!(),
         }
     }
