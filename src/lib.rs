@@ -421,6 +421,10 @@ impl Compiler {
                     let delta = curr.len() - rest.len();
                     Some((input.advance(delta), ()))
                 })()),
+                Atom::Ident(key) => {
+                    let ident = self.indices.get(key).unwrap();
+                    quote!(#ident(input))
+                }
                 _ => todo!(),
             }
             Expr::Cat(inner) => {

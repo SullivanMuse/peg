@@ -26,3 +26,13 @@ fn test_char_range() {
     let input = Input::new("1234");
     assert_eq!(x(input), Some((input.advance(1), ())));
 }
+
+#[test]
+fn test_call() {
+    peg! {
+        x = '0'..='9'
+        y = x
+    }
+    let input = Input::new("1234");
+    assert_eq!(y(input), Some((input.advance(1), ())));
+}
