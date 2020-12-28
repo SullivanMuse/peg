@@ -73,5 +73,4 @@ Try the rule over and over, with recursion depth from 1.., until the parse fails
 
 # Todo
 
-- Change `__atomic` to `_atomic`
 - Use `left_rec` to error on left recursion

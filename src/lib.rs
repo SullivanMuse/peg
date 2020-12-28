@@ -256,8 +256,8 @@ impl Grammar {
         let mut reverse = HashMap::new();
         let mut space_defined = false;
         for rule in self.rules.iter() {
-            if rule.name.to_string().ends_with("__atomic") {
-                panic!("Rule names may not end with `__atomic`.");
+            if rule.name.to_string().ends_with("_atomic") {
+                panic!("Rule names may not end with `_atomic`.");
             }
             if rule.name.to_string().as_str() == "space" {
                 space_defined = true;
@@ -452,7 +452,7 @@ impl Compiler {
                 Atom::Ident(key) => {
                     let ident = if atomic {
                         let ident = self.indices.get(key).unwrap();
-                        let name = format!("{}__atomic", ident.to_string());
+                        let name = format!("{}_atomic", ident.to_string());
                         Ident::new(&name, ident.span())
                     } else {
                         self.indices.get(key).unwrap().clone()
@@ -572,7 +572,7 @@ impl Compiler {
         let ret = rule.ty.as_ref().map(|ty| quote!(#ty)).unwrap_or(quote!(()));
         let ident = if atomic {
             let ident = self.indices.get(&rule.name).unwrap();
-            let name = format!("{}__atomic", ident.to_string());
+            let name = format!("{}_atomic", ident.to_string());
             Ident::new(&name, ident.span())
         } else {
             self.indices.get(&rule.name).unwrap().clone()
@@ -699,9 +699,9 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "Rule names may not end with `__atomic`.")]
+    #[should_panic(expected = "Rule names may not end with `_atomic`.")]
     fn test_does_not_end_with_atomic() {
-        parse_str::<Grammar>("x__atomic = 'x'")
+        parse_str::<Grammar>("x_atomic = 'x'")
             .unwrap()
             .to_compiler();
     }
