@@ -8,7 +8,8 @@ A rust macro for generating PEG parsers.
   - strs `"Hello"`
   - chars `'c'`
   - char ranges `'0'..='9'`
-- Atomic `atomic e`
+- Span `$e`
+- Atomic `@e`
 - Named `name: e`
 - Lookahead
   - Positive lookahead `&e`
