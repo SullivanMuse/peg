@@ -404,7 +404,7 @@ impl Compiler {
     }
 }
 
-/// A structure that treats references as equal
+/// A structure that treats references as equal. Used for memoization in the left_rec checker
 #[derive(Debug, Eq)]
 struct RefEq<'a, T>(&'a T);
 
