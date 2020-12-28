@@ -82,6 +82,7 @@ enum Expr<Key> {
     Pos(Box<Self>),
     Neg(Box<Self>),
     Atomic(Box<Self>),
+    Span(Box<Self>),
 
     Atom(Atom<Key>),
 }
@@ -105,6 +106,10 @@ impl Expr<Ident> {
             input.parse::<Token![@]>()?;
             let inner = Self::prefix(input)?;
             Ok(Self::Atomic(Box::new(inner)))
+        } else if input.peek(Token![$]) {
+            input.parse::<Token![$]>()?;
+            let inner = Self::prefix(input)?;
+            Ok(Self::Span(Box::new(inner)))
         } else {
             Self::atom(input)
         }
@@ -148,6 +153,7 @@ impl Expr<Ident> {
             || input.peek(Token![!])
             || input.peek(Token![@])
             || input.peek(Token![&])
+            || input.peek(Token![$])
             || input.peek(Paren)
         {
             seq.push(Self::named(input)?);
@@ -176,6 +182,7 @@ impl Expr<Ident> {
             Self::Atomic(inner) => Expr::Atomic(Box::new(inner.replace_keys(map))),
 
             Self::Atom(atom) => Expr::Atom(atom.replace_keys(map)),
+            Self::Span(inner) => Expr::Span(Box::new(inner.replace_keys(map))),
         }
     }
 }
@@ -318,6 +325,7 @@ impl Compiler {
                     Expr::Cat(inner, _) => inner.iter().all(|(_, inner)| self.transparent(inner)),
                     
                     // The following may consume no input if the inner parser may consume no input
+                    Expr::Span(inner) => self.transparent(inner),
                     Expr::Many1(inner) => self.transparent(inner),
                     Expr::Atomic(inner) => self.transparent(inner),
                     
@@ -376,6 +384,7 @@ impl Compiler {
                     | Expr::Pos(inner)
                     | Expr::Neg(inner)
                     | Expr::Atomic(inner) // TODO: Fix for implicit spaces
+                    | Expr::Span(inner)
                     | Expr::Many0(inner) => self.left_rec_expr(inner),
     
                     // Atoms MAY be left recursive
@@ -396,6 +405,7 @@ impl Compiler {
                         // Literals can't be left recursive because they don't contain other rules.
                         _ => false
                     }
+
                 };
                 self.left_rec_expr_map.insert(ref_eq, result);
                 result
@@ -672,5 +682,17 @@ mod test {
         parse_str::<Grammar>("x__atomic = 'x'")
             .unwrap()
             .to_compiler();
+    }
+
+    #[test]
+    fn test_span_parser() {
+        let expr = parse_str::<Expr<Ident>>("$e").unwrap();
+        dbg!(&expr);
+        match expr {
+            Expr::Cat(v, _) => if let Some((_, Expr::Span(_))) = v.get(0) {} else {
+                assert!(false);
+            }
+            _ => assert!(false),
+        }
     }
 }
