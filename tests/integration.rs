@@ -204,3 +204,18 @@ fn test_left_rec() {
     let span = Span::new(s, 0, 5);
     assert_eq!(y(input), Some((input.advance(5), (span, ()))));
 }
+
+#[test]
+fn test_left_rec_extra() {
+    peg! {
+        x = '0'..='9'
+        y = y x | x
+        z -> (Span<'a>, ()) = r: $y { r }
+    }
+
+    let s = "1 2 3";
+    let input = Input::new(s);
+    let span = Span::new(s, 0, 5);
+    assert_eq!(y(input), Some((input.advance(5), ())));
+    assert_eq!(z(input), Some((input.advance(5), (span, ()))));
+}
