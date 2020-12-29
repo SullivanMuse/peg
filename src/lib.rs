@@ -553,8 +553,6 @@ impl Compiler {
                                         let result = {
                                             #expr
                                         };
-                                        dbg!("Here");
-                                        dbg!(&result);
                                         self.map.insert((depth, input.index), result);
                                         self.map.get(&(depth, input.index)).unwrap().clone()
                                     }
@@ -637,6 +635,10 @@ impl Compiler {
             impl<'a> Span<'a> {
                 fn new(string: &'a str, start: usize, end: usize) -> Self {
                     Self { string, start, end }
+                }
+
+                fn to_str(&self) -> &str {
+                    self.string.get(self.start..self.end).expect("Bad span.")
                 }
             }
         );
@@ -727,7 +729,6 @@ mod test {
     #[test]
     fn test_span_parser() {
         let expr = parse_str::<Expr<Ident>>("$e").unwrap();
-        dbg!(&expr);
         match expr {
             Expr::Cat(v, _) => if let Some((_, Expr::Span(_))) = v.get(0) {} else {
                 assert!(false);
