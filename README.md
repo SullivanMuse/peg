@@ -41,7 +41,7 @@ cat = (named | unary)+
 named = name ':' unary
 unary = prefix | postfix | atom
 prefix_op
-  = '$' // Slice
+  = '$' // Span
   | '@' // Atomic
   | '!' // Negative lookahead
   | '&' // Positive lookahead
