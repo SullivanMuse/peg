@@ -297,135 +297,70 @@ struct Compiler {
 impl Compiler {
     /// Determine if rules are left recursive and modify relevant booleans
     fn left_rec(&mut self) {
-        /// Helper structure
-        struct Checker<'a> {
-            // Basic info
-            rules: &'a Vec<Rule<usize>>,
-            rule: usize,
-    
-            // Memos
-            transparent_map: HashMap<RefEq<'a, Expr<usize>>, bool>,
-            left_rec_expr_map: HashMap<RefEq<'a, Expr<usize>>, bool>,
-        }
-    
-        impl<'a> Checker<'a> {
-            /// Returns whether or not a rule can consume no input
-            fn transparent(&mut self, expr: &'a Expr<usize>) -> bool {
-                let ref_eq = RefEq(expr);
-                if let Some(result) = self.transparent_map.get(&ref_eq) {
-                    return *result
+        use graph::digraph::{DiGraph, Node};
+
+        /// Helper for constructing graph
+        /// the boolean return value represents whether or not the item can be skipped in sequences
+        fn add_edges(graph: &mut DiGraph, from: Node, expr: &Expr<usize>) -> bool {
+            match expr {
+                Expr::Many0(inner)
+                | Expr::Optional(inner)
+                | Expr::Pos(inner)
+                | Expr::Neg(inner) => {
+                    add_edges(graph, from, inner);
+                    true
                 }
-                let result = match expr {
-                    // Alternative may consume no input if either alternative may consume no input
-                    Expr::Alt(left, right)
-                        => self.transparent(left)
-                        || self.transparent(right),
-                    
-                    // Concatenation may consume no input if all rules may consume no input
-                    Expr::Cat(inner, _) => inner.iter().all(|(_, inner)| self.transparent(inner)),
-                    
-                    // The following may consume no input if the inner parser may consume no input
-                    Expr::Span(inner) => self.transparent(inner),
-                    Expr::Many1(inner) => self.transparent(inner),
-                    Expr::Atomic(inner) => self.transparent(inner),
-                    
-                    // The following may consume no input unconditionally
-                    Expr::Many0(_)
-                    | Expr::Optional(_)
-                    | Expr::Pos(_)
-                    | Expr::Neg(_) => true,
-    
-                    // Atoms must be refined
-                    Expr::Atom(atom) => match atom {
-                        // A call to another rule is transparent if the rule is transparent
-                        Atom::Ident(key) => {
-                            let inner = &self.rules.get(*key).unwrap().expr;
-                            self.transparent(inner)
-                        }
-    
-                        // Parenthesized atoms are the result of the inner expr
-                        Atom::Paren(inner) => self.transparent(inner),
-    
-                        // Literals must consume input
-                        _ => false,
-                    }
-                };
-                self.transparent_map.insert(ref_eq, result);
-                result
-            }
-    
-            /// Returns whether or not an expression is left recursive directly
-            fn left_rec_expr(&mut self, expr: &'a Expr<usize>) -> bool {
-                let ref_eq = RefEq(expr);
-                if let Some(result) = self.left_rec_expr_map.get(&ref_eq) {
-                    return *result
-                }
-                let result = match expr {
-                    // An alternative is left recursive if one of the alternatives is left recursive
-                    Expr::Alt(left, right)
-                        => self.left_rec_expr(left)
-                        || self.left_rec_expr(right),
-                    
-                    // A concatenation is left recursive if any of the possible starts of the concatenation are left recursive
-                    Expr::Cat(inner, _) => {
-                        for (_, inner) in inner {
-                            if self.left_rec_expr(inner) {
-                                return true
-                            } else if !self.transparent(inner) {
-                                break
-                            }
-                        }
+
+                Expr::Many1(inner)
+                | Expr::Atomic(inner)
+                | Expr::Span(inner) => add_edges(graph, from, inner),
+
+                Expr::Alt(left, right)
+                    => add_edges(graph, from, left)
+                    || add_edges(graph, from, right),
+                
+                Expr::Cat(inner, _)
+                    => inner.iter().all(|(_, inner)| add_edges(graph, from, inner)),
+                
+                Expr::Atom(atom) => match atom {
+                    Atom::Ident(index) => {
+                        let to = graph.get_node(*index).unwrap();
+                        graph.edge(from, to);
                         false
                     }
-    
-                    // Left recursive if the inner is
-                    Expr::Many1(inner)
-                    | Expr::Optional(inner)
-                    | Expr::Pos(inner)
-                    | Expr::Neg(inner)
-                    | Expr::Atomic(inner) // TODO: Fix for implicit spaces
-                    | Expr::Span(inner)
-                    | Expr::Many0(inner) => self.left_rec_expr(inner),
-    
-                    // Atoms MAY be left recursive
-                    Expr::Atom(atom) => match atom {
-                        // A call dereferences to determine if left recursive
-                        Atom::Ident(key) => {
-                            if *key == self.rule {
-                                true
-                            } else {
-                                let inner = &self.rules.get(*key).unwrap().expr;
-                                self.left_rec_expr(inner)
-                            }
-                        }
-    
-                        // Simple
-                        Atom::Paren(inner) => self.left_rec_expr(inner),
-    
-                        // Literals can't be left recursive because they don't contain other rules.
-                        _ => false
-                    }
-
-                };
-                self.left_rec_expr_map.insert(ref_eq, result);
-                result
+                    Atom::Str(_)
+                    | Atom::Char(_)
+                    | Atom::Range(_, _) => false,
+                    Atom::Paren(inner) => add_edges(graph, from, inner),
+                }
             }
         }
-    
-        let left_recs = {
-            let mut checker = Checker {
-                rules: &self.rules,
-                rule: 0,
-                transparent_map: HashMap::new(),
-                left_rec_expr_map: HashMap::new(),
-            };
-            self.rules.iter().enumerate().map(|(index, rule)| {
-                checker.rule = index;
-                checker.left_rec_expr(&rule.expr)
-            }).collect::<Vec<_>>()
-        };
 
-        self.rules.iter_mut().zip(left_recs.into_iter()).for_each(|(rule, rec)| rule.is_left_rec = rec);
+        let mut graph = DiGraph::new();
+
+        // Create all of the nodes
+        (0..self.rules.len())
+            .into_iter()
+            .for_each(|_| {graph.node();});
+        
+        // Add all of the edges
+        self.rules
+            .iter()
+            .enumerate()
+            .for_each(|(index, rule)| {
+                let node = graph.get_node(index).unwrap();
+                let expr = &rule.expr;
+                add_edges(&mut graph, node, expr);
+            });
+        
+        // Detect all of the cycles
+        self.rules
+            .iter_mut()
+            .enumerate()
+            .for_each(|(index, rule)| {
+                let node = graph.get_node(index).unwrap();
+                rule.is_left_rec = graph.cycle_from(node);
+            });
     }
 
     fn compile_expr(&self, expr: &Expr<usize>, atomic: bool, left_rec: Option<usize>) -> proc_macro2::TokenStream {
