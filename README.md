@@ -88,7 +88,7 @@ tuple = '(' item: item ',' items: item ^ ',' ')' {
 }
 ```
 
-Alternatively
+Alternatively (this isn't possible yet)
 
 ```
 tuple = '(' items: item ^ ',' ')' {?
