@@ -438,6 +438,34 @@ impl Compiler {
                                     })
                                 }
                             }
+                            Expr::Many1(inner) => {
+                                let inner = self.compile_expr(inner, atomic, left_rec);
+                                if !atomic {
+                                    quote!((|| {
+                                        let (mut input, result) = #inner?;
+                                        let mut results = vec![result];
+                                        while let Some((input1, result)) = (|input: Input<'a>| {
+                                            let (input, _) = space(input)?;
+                                            let (input, result) = #inner?;
+                                            Some((input, result))
+                                        })(input) {
+                                            input = input1;
+                                            results.push(result);
+                                        }
+                                        Some((input, results))
+                                    })())
+                                } else {
+                                    quote!((|| {
+                                        let (mut input, result) = #inner?;
+                                        let mut results = vec![result];
+                                        while let Some((input1, result)) = #inner {
+                                            input = input1;
+                                            results.push(result);
+                                        }
+                                        Some((input, results))
+                                    })())
+                                }
+                            }
                             _ => self.compile_expr(inner, atomic, left_rec),
                         }
                     } else {
