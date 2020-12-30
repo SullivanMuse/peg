@@ -259,3 +259,28 @@ fn test_optional_vector() {
     let input = Input::new(s);
     assert_eq!(y(input), Some((input, None)));
 }
+
+#[test]
+fn test_delims() {
+    peg! {
+        x = '0'..='9'
+        y -> Span<'a> = r: $@(x+) { r.0 }
+        comma -> Span<'a> = r: $',' { r.0 }
+        z -> (Vec<Span<'a>>, Vec<Span<'a>>)
+            = r: y ^ comma { r }
+    }
+
+    let s = "10, 20, 30";
+    let input = Input::new(s);
+    assert_eq!(z(input), Some((input.advance(s.len()), (
+        vec![
+            Span::new(s, 0, 2),
+            Span::new(s, 4, 6),
+            Span::new(s, 8, 10),
+        ],
+        vec![
+            Span::new(s, 2, 3),
+            Span::new(s, 6, 7),
+        ],
+    ))));
+}

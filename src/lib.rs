@@ -77,6 +77,7 @@ enum Expr<Key> {
     Many0(Box<Self>),
     Many1(Box<Self>),
     Optional(Box<Self>),
+    Delim(Box<Self>, Box<Self>),
 
     // Prefix
     Pos(Box<Self>),
@@ -127,6 +128,10 @@ impl Expr<Ident> {
             } else if input.peek(Token![+]) {
                 input.parse::<Token![+]>()?;
                 inner = Self::Many1(Box::new(inner));
+            } else if input.peek(Token![^]) {
+                input.parse::<Token![^]>()?;
+                let delimiter = Self::postfix(input)?;
+                inner = Self::Delim(Box::new(inner), Box::new(delimiter));
             } else {
                 break
             }
@@ -178,6 +183,7 @@ impl Expr<Ident> {
             Self::Many0(inner) => Expr::Many0(Box::new(inner.replace_keys(map))),
             Self::Many1(inner) => Expr::Many1(Box::new(inner.replace_keys(map))),
             Self::Optional(inner) => Expr::Optional(Box::new(inner.replace_keys(map))),
+            Self::Delim(left, right) => Expr::Delim(Box::new(left.replace_keys(map)), Box::new(right.replace_keys(map))),
 
             // Prefix
             Self::Pos(inner) => Expr::Pos(Box::new(inner.replace_keys(map))),
@@ -316,7 +322,8 @@ impl Compiler {
 
                 Expr::Many1(inner)
                 | Expr::Atomic(inner)
-                | Expr::Span(inner) => add_edges(graph, from, inner),
+                | Expr::Span(inner)
+                | Expr::Delim(inner, _) => add_edges(graph, from, inner),
 
                 Expr::Alt(left, right)
                     => add_edges(graph, from, left)
@@ -535,6 +542,59 @@ impl Compiler {
                         }
                         Some((input, ()))
                     })())
+                }
+            }
+            Expr::Delim(item, delim) => {
+                let item = self.compile_expr(item, atomic, left_rec);
+                let delim = self.compile_expr(delim, atomic, left_rec);
+                if !atomic {
+                    quote!({
+                        if let Some((mut input, item)) = #item {
+                            let mut items = vec![item];
+                            let mut delims = vec![];
+                            while let Some((input1, delim)) = (|input: Input<'a>| {
+                                let (input, _) = space(input)?;
+                                let (input, delim) = #delim?;
+                                Some((input, delim))
+                            })(input) {
+                                delims.push(delim);
+                                input = input1;
+                                if let Some((input1, item)) = (|input: Input<'a>| {
+                                    let (input, _) = space(input)?;
+                                    let (input, item) = #item?;
+                                    Some((input, item))
+                                })(input) {
+                                    items.push(item);
+                                    input = input1;
+                                } else {
+                                    break
+                                }
+                            }
+                            Some((input, (items, delims)))
+                        } else {
+                            Some((input, (vec![], vec![])))
+                        }
+                    })
+                } else {
+                    quote!({
+                        if let Some((mut input, item)) = #item {
+                            let mut items = vec![item];
+                            let mut delims = vec![];
+                            while let Some((input1, delim)) = #delim {
+                                delims.push(delim);
+                                input = input1;
+                                if let Some((input1, item)) = #item {
+                                    items.push(item);
+                                    input = input1;
+                                } else {
+                                    break
+                                }
+                            }
+                            Some((input, (items, delims)))
+                        } else {
+                            Some((input, (vec![], vec![])))
+                        }
+                    })
                 }
             }
             Expr::Optional(inner) => {
