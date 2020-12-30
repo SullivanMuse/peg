@@ -73,5 +73,4 @@ Try the rule over and over, with recursion depth from 1.., until the parse fails
 
 # Todo
 
-- Add optional collection for optional
 - Add delimiter operator `^`

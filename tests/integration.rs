@@ -243,3 +243,19 @@ fn test_many1_vector() {
     let input = Input::new(s);
     assert_eq!(y(input), Some((input.advance(5), vec![(Span::new(s, 0, 1), ()), (Span::new(s, 2, 3), ()), (Span::new(s, 4, 5), ())])));
 }
+
+#[test]
+fn test_optional_vector() {
+    peg! {
+        x = '0'..='9'
+        y -> Option<(Span<'a>, ())> = r: ($x)? { r }
+    }
+
+    let s = "1";
+    let input = Input::new(s);
+    assert_eq!(y(input), Some((input.advance(1), Some((Span::new(s, 0, 1), ())))));
+
+    let s = "";
+    let input = Input::new(s);
+    assert_eq!(y(input), Some((input, None)));
+}
