@@ -71,7 +71,7 @@ impl Parse for Atom<Ident> {
 #[derive(Debug, PartialEq, Eq)]
 enum Expr<Key> {
     Alt(Box<Self>, Box<Self>),
-    Cat(Vec<(Option<Ident>, Self)>, Option<Block>),
+    Seq(Vec<(Option<Ident>, Self)>, Option<Block>),
 
     // Postfix
     Many0(Box<Self>),
@@ -145,7 +145,7 @@ impl Expr<Ident> {
         }
     }
 
-    fn cat(input: ParseStream) -> Result<Self> {
+    fn seq(input: ParseStream) -> Result<Self> {
         let mut seq = vec![Self::named(input)?];
         while (input.peek(Ident) && !input.peek2(Token![=]) && !input.peek2(Token![->]))
             || input.peek(LitStr)
@@ -163,13 +163,13 @@ impl Expr<Ident> {
         } else {
             None
         };
-        Ok(Self::Cat(seq, action))
+        Ok(Self::Seq(seq, action))
     }
 
     fn replace_keys(&self, map: &HashMap<Ident, usize>) -> Expr<usize> {
         match self {
             Self::Alt(left, right) => Expr::Alt(Box::new(left.replace_keys(map)), Box::new(right.replace_keys(map))),
-            Self::Cat(inner, action) => Expr::Cat(inner.iter().map(|(name, inner)| (name.clone(), inner.replace_keys(map))).collect::<Vec<_>>(), action.clone()),
+            Self::Seq(inner, action) => Expr::Seq(inner.iter().map(|(name, inner)| (name.clone(), inner.replace_keys(map))).collect::<Vec<_>>(), action.clone()),
             
             // Postfix
             Self::Many0(inner) => Expr::Many0(Box::new(inner.replace_keys(map))),
@@ -189,10 +189,10 @@ impl Expr<Ident> {
 
 impl Parse for Expr<Ident> {
     fn parse(input: ParseStream) -> Result<Self> {
-        let mut left = Self::cat(input)?;
+        let mut left = Self::seq(input)?;
         while input.peek(Token![|]) {
             input.parse::<Token![|]>()?;
-            let right = Self::cat(input)?;
+            let right = Self::seq(input)?;
             left = Self::Alt(Box::new(left), Box::new(right));
         }
         Ok(left)
@@ -319,7 +319,7 @@ impl Compiler {
                     => add_edges(graph, from, left)
                     || add_edges(graph, from, right),
                 
-                Expr::Cat(inner, _)
+                Expr::Seq(inner, _)
                     => inner.iter().all(|(_, inner)| add_edges(graph, from, inner)),
                 
                 Expr::Atom(atom) => match atom {
@@ -398,7 +398,7 @@ impl Compiler {
                 }
                 Atom::Paren(inner) => self.compile_expr(inner, atomic, left_rec),
             }
-            Expr::Cat(inner, action) => {
+            Expr::Seq(inner, action) => {
                 let mut q = quote!();
                 let mut first = true;
                 for (name, inner) in inner {
@@ -730,7 +730,7 @@ mod test {
     fn test_span_parser() {
         let expr = parse_str::<Expr<Ident>>("$e").unwrap();
         match expr {
-            Expr::Cat(v, _) => if let Some((_, Expr::Span(_))) = v.get(0) {} else {
+            Expr::Seq(v, _) => if let Some((_, Expr::Span(_))) = v.get(0) {} else {
                 assert!(false);
             }
             _ => assert!(false),
