@@ -405,8 +405,45 @@ impl Compiler {
                 let mut q = quote!();
                 let mut first = true;
                 for (name, inner) in inner {
+                    let inner = if name.is_some() {
+                        match inner {
+                            Expr::Many0(inner) => {
+                                let inner = self.compile_expr(inner, atomic, left_rec);
+                                if !atomic {
+                                    quote!({
+                                        if let Some((mut input, result)) = #inner {
+                                            let mut results = vec![result];
+                                            while let Some((input1, result)) = (|input: Input<'a>| {
+                                                let (input, _) = space(input)?;
+                                                let (input, result) = #inner?;
+                                                Some((input, result))
+                                            })(input) {
+                                                input = input1;
+                                                results.push(result);
+                                            }
+                                            Some((input, results))
+                                        } else {
+                                            Some((input, vec![]))
+                                        }
+                                    })
+                                } else {
+                                    quote!({
+                                        let mut input = input;
+                                        let mut results = vec![];
+                                        while let Some((input1, result)) = #inner {
+                                            input = input1;
+                                            results.push(result);
+                                        }
+                                        Some((input, results))
+                                    })
+                                }
+                            }
+                            _ => self.compile_expr(inner, atomic, left_rec),
+                        }
+                    } else {
+                        self.compile_expr(inner, atomic, left_rec)
+                    };
                     let name = name.as_ref().map(|name| quote!(#name)).unwrap_or(quote!(_));
-                    let inner = self.compile_expr(inner, atomic, left_rec);
                     q = if atomic || first {
                         first = false;
                         quote!(#q; let (input, #name) = #inner?)

@@ -219,3 +219,15 @@ fn test_left_rec_extra() {
     assert_eq!(y(input), Some((input.advance(5), ())));
     assert_eq!(z(input), Some((input.advance(5), (span, ()))));
 }
+
+#[test]
+fn test_many0_vector() {
+    peg! {
+        x = '0'..='9'
+        y -> Vec<(Span<'a>, ())> = r: ($x)* { r }
+    }
+
+    let s = "1 2 3";
+    let input = Input::new(s);
+    assert_eq!(y(input), Some((input.advance(5), vec![(Span::new(s, 0, 1), ()), (Span::new(s, 2, 3), ()), (Span::new(s, 4, 5), ())])));
+}

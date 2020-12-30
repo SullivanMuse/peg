@@ -73,6 +73,6 @@ Try the rule over and over, with recursion depth from 1.., until the parse fails
 
 # Todo
 
-- Add vector collection for many0 and many1
+- Add vector collection for many1
 - Add optional collection for optional
 - Add delimiter operator `^`
