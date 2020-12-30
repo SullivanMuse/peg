@@ -163,7 +163,10 @@ impl Expr<Ident> {
         } else {
             None
         };
-        Ok(Self::Seq(seq, action))
+        match (seq.len(), &action) {
+            (1, None) if seq[0].0.is_none() => Ok(seq.pop().unwrap().1),
+            _ => Ok(Self::Seq(seq, action))
+        }
     }
 
     fn replace_keys(&self, map: &HashMap<Ident, usize>) -> Expr<usize> {
@@ -728,13 +731,20 @@ mod test {
 
     #[test]
     fn test_span_parser() {
-        let expr = parse_str::<Expr<Ident>>("$e").unwrap();
-        match expr {
-            Expr::Seq(v, _) => if let Some((_, Expr::Span(_))) = v.get(0) {} else {
-                assert!(false);
-            }
-            _ => assert!(false),
+        if let Ok(Expr::Span(_)) = parse_str::<Expr<Ident>>("$e") {
+            assert!(true)
+        } else {
+            assert!(false)
         }
+    }
+
+    #[test]
+    fn test_seq_edges() {
+        if let Ok(Expr::Seq(..)) = parse_str::<Expr<Ident>>("r: $e") {}
+        else { assert!(false) }
+
+        if let Ok(Expr::Seq(..)) = parse_str::<Expr<Ident>>("$e {}") {}
+        else { assert!(false) }
     }
 
     #[test]
