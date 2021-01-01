@@ -306,7 +306,7 @@ struct Compiler {
 impl Compiler {
     /// Determine if rules are left recursive and modify relevant booleans
     fn left_rec(&mut self) {
-        use graph::digraph::{DiGraph, Node};
+        use sully_graph::digraph::{DiGraph, Node};
 
         /// Helper for constructing graph
         /// the boolean return value represents whether or not the item can be skipped in sequences

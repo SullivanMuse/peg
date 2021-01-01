@@ -1,4 +1,4 @@
-use pgen::peg;
+use sully_peg::peg;
 
 #[test]
 fn test_char_lit() {
