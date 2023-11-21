@@ -1,25 +1,12 @@
-use std::collections::HashMap;
 use proc_macro::TokenStream;
 use quote::quote;
+use std::collections::HashMap;
 use syn::{
-    Block,
-    Ident,
-    LitChar,
-    LitStr,
     parenthesized,
+    parse::{Parse, ParseStream},
     parse_macro_input,
-    parse::{
-        Parse,
-        ParseStream,
-    },
-    Result,
-    Token,
-    token::{
-        Brace,
-        Paren,
-    },
-    Type,
-    Visibility,
+    token::{Brace, Paren},
+    Block, Ident, LitChar, LitStr, Result, Token, Type, Visibility,
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -34,7 +21,10 @@ enum Atom<Key> {
 impl Atom<Ident> {
     fn replace_keys(&self, map: &HashMap<Ident, usize>) -> Atom<usize> {
         match self {
-            Self::Ident(ident) => Atom::Ident(*map.get(ident).expect(&format!("No rule matches the identifier: `{}`", ident))),
+            Self::Ident(ident) => Atom::Ident(
+                *map.get(ident)
+                    .expect(&format!("No rule matches the identifier: `{}`", ident)),
+            ),
             Self::Str(string) => Atom::Str(string.clone()),
             Self::Char(character) => Atom::Char(character.clone()),
             Self::Range(left, right) => Atom::Range(left.clone(), right.clone()),
@@ -133,7 +123,7 @@ impl Expr<Ident> {
                 let delimiter = Self::postfix(input)?;
                 inner = Self::Delim(Box::new(inner), Box::new(delimiter));
             } else {
-                break
+                break;
             }
         }
         Ok(inner)
@@ -170,20 +160,32 @@ impl Expr<Ident> {
         };
         match (seq.len(), &action) {
             (1, None) if seq[0].0.is_none() => Ok(seq.pop().unwrap().1),
-            _ => Ok(Self::Seq(seq, action))
+            _ => Ok(Self::Seq(seq, action)),
         }
     }
 
     fn replace_keys(&self, map: &HashMap<Ident, usize>) -> Expr<usize> {
         match self {
-            Self::Alt(left, right) => Expr::Alt(Box::new(left.replace_keys(map)), Box::new(right.replace_keys(map))),
-            Self::Seq(inner, action) => Expr::Seq(inner.iter().map(|(name, inner)| (name.clone(), inner.replace_keys(map))).collect::<Vec<_>>(), action.clone()),
-            
+            Self::Alt(left, right) => Expr::Alt(
+                Box::new(left.replace_keys(map)),
+                Box::new(right.replace_keys(map)),
+            ),
+            Self::Seq(inner, action) => Expr::Seq(
+                inner
+                    .iter()
+                    .map(|(name, inner)| (name.clone(), inner.replace_keys(map)))
+                    .collect::<Vec<_>>(),
+                action.clone(),
+            ),
+
             // Postfix
             Self::Many0(inner) => Expr::Many0(Box::new(inner.replace_keys(map))),
             Self::Many1(inner) => Expr::Many1(Box::new(inner.replace_keys(map))),
             Self::Optional(inner) => Expr::Optional(Box::new(inner.replace_keys(map))),
-            Self::Delim(left, right) => Expr::Delim(Box::new(left.replace_keys(map)), Box::new(right.replace_keys(map))),
+            Self::Delim(left, right) => Expr::Delim(
+                Box::new(left.replace_keys(map)),
+                Box::new(right.replace_keys(map)),
+            ),
 
             // Prefix
             Self::Pos(inner) => Expr::Pos(Box::new(inner.replace_keys(map))),
@@ -221,10 +223,12 @@ struct Rule<Key> {
 impl Rule<Ident> {
     fn replace_keys(&self, map: &HashMap<Ident, usize>) -> Rule<usize> {
         Rule::<usize> {
-            vis:         self.vis.clone(),
-            name:        *map.get(&self.name).expect("The name of a rule never made it into the map."),
-            ty:          self.ty.clone(),
-            expr:        self.expr.replace_keys(map),
+            vis: self.vis.clone(),
+            name: *map
+                .get(&self.name)
+                .expect("The name of a rule never made it into the map."),
+            ty: self.ty.clone(),
+            expr: self.expr.replace_keys(map),
             is_left_rec: self.is_left_rec,
         }
     }
@@ -247,7 +251,13 @@ impl Parse for Rule<Ident> {
         input.parse::<Token![=]>()?;
         let expr = input.parse::<Expr<Ident>>()?;
         let is_left_rec = false;
-        Ok(Self { vis, name, ty, expr, is_left_rec })
+        Ok(Self {
+            vis,
+            name,
+            ty,
+            expr,
+            is_left_rec,
+        })
     }
 }
 
@@ -280,8 +290,16 @@ impl Grammar {
                 counter += 1;
             }
         }
-        let rules = self.rules.iter().map(|rule| rule.replace_keys(&reverse)).collect::<Vec<_>>();
-        Compiler { rules, indices, space_defined }
+        let rules = self
+            .rules
+            .iter()
+            .map(|rule| rule.replace_keys(&reverse))
+            .collect::<Vec<_>>();
+        Compiler {
+            rules,
+            indices,
+            space_defined,
+        }
     }
 }
 
@@ -325,55 +343,51 @@ impl Compiler {
                 | Expr::Span(inner)
                 | Expr::Delim(inner, _) => add_edges(graph, from, inner),
 
-                Expr::Alt(left, right)
-                    => add_edges(graph, from, left)
-                    || add_edges(graph, from, right),
-                
-                Expr::Seq(inner, _)
-                    => inner.iter().all(|(_, inner)| add_edges(graph, from, inner)),
-                
+                Expr::Alt(left, right) => {
+                    add_edges(graph, from, left) || add_edges(graph, from, right)
+                }
+
+                Expr::Seq(inner, _) => inner.iter().all(|(_, inner)| add_edges(graph, from, inner)),
+
                 Expr::Atom(atom) => match atom {
                     Atom::Ident(index) => {
                         let to = graph.get_node(*index).unwrap();
                         graph.edge(from, to);
                         false
                     }
-                    Atom::Str(_)
-                    | Atom::Char(_)
-                    | Atom::Range(_, _) => false,
+                    Atom::Str(_) | Atom::Char(_) | Atom::Range(_, _) => false,
                     Atom::Paren(inner) => add_edges(graph, from, inner),
-                }
+                },
             }
         }
 
         let mut graph = DiGraph::new();
 
         // Create all of the nodes
-        (0..self.rules.len())
-            .into_iter()
-            .for_each(|_| {graph.node();});
-        
+        (0..self.rules.len()).into_iter().for_each(|_| {
+            graph.node();
+        });
+
         // Add all of the edges
-        self.rules
-            .iter()
-            .enumerate()
-            .for_each(|(index, rule)| {
-                let node = graph.get_node(index).unwrap();
-                let expr = &rule.expr;
-                add_edges(&mut graph, node, expr);
-            });
-        
+        self.rules.iter().enumerate().for_each(|(index, rule)| {
+            let node = graph.get_node(index).unwrap();
+            let expr = &rule.expr;
+            add_edges(&mut graph, node, expr);
+        });
+
         // Detect all of the cycles
-        self.rules
-            .iter_mut()
-            .enumerate()
-            .for_each(|(index, rule)| {
-                let node = graph.get_node(index).unwrap();
-                rule.is_left_rec = graph.cycle_from(node);
-            });
+        self.rules.iter_mut().enumerate().for_each(|(index, rule)| {
+            let node = graph.get_node(index).unwrap();
+            rule.is_left_rec = graph.cycle_from(node);
+        });
     }
 
-    fn compile_expr(&self, expr: &Expr<usize>, atomic: bool, left_rec: Option<usize>) -> proc_macro2::TokenStream {
+    fn compile_expr(
+        &self,
+        expr: &Expr<usize>,
+        atomic: bool,
+        left_rec: Option<usize>,
+    ) -> proc_macro2::TokenStream {
         match expr {
             Expr::Atom(atom) => match atom {
                 Atom::Char(char_lit) => quote!((|| {
@@ -396,18 +410,20 @@ impl Compiler {
                 })()),
                 Atom::Ident(key) => match left_rec {
                     Some(key1) if *key == key1 => quote!((self.parse(depth - 1, input))),
-                    _ => if atomic {
-                        let ident = self.indices.get(key).unwrap();
-                        let name = format!("{}_atomic", ident.to_string());
-                        let ident = Ident::new(&name, ident.span());
-                        quote!(#ident(input))
-                    } else {
-                        let ident = self.indices.get(key).unwrap();
-                        quote!(#ident(input))
+                    _ => {
+                        if atomic {
+                            let ident = self.indices.get(key).unwrap();
+                            let name = format!("{}_atomic", ident.to_string());
+                            let ident = Ident::new(&name, ident.span());
+                            quote!(#ident(input))
+                        } else {
+                            let ident = self.indices.get(key).unwrap();
+                            quote!(#ident(input))
+                        }
                     }
-                }
+                },
                 Atom::Paren(inner) => self.compile_expr(inner, atomic, left_rec),
-            }
+            },
             Expr::Seq(inner, action) => {
                 let mut q = quote!();
                 let mut first = true;
@@ -490,7 +506,10 @@ impl Compiler {
                         )
                     };
                 }
-                let action = action.as_ref().map(|action| quote!(#action)).unwrap_or(quote!(()));
+                let action = action
+                    .as_ref()
+                    .map(|action| quote!(#action))
+                    .unwrap_or(quote!(()));
                 quote!((||{#q; Some((input, #action))})())
             }
             Expr::Many0(inner) => {
@@ -663,7 +682,7 @@ impl Compiler {
                             Option<(Input<'a>, #ret)>,
                         >,
                     }
-                
+
                     impl<'a> Cache<'a> {
                         fn parse(
                             &mut self,
@@ -688,15 +707,15 @@ impl Compiler {
                             }
                         }
                     }
-                
+
                     let mut cache = Cache {
                         map: HashMap::new(),
                     };
 
                     let mut max_position = None;
-                
+
                     let mut result = None;
-                
+
                     for depth in 1.. {
                         match cache.parse(depth, input) {
                             None => break,
@@ -714,7 +733,7 @@ impl Compiler {
                             }
                         }
                     }
-                
+
                     result
                 }
             )
@@ -829,18 +848,24 @@ mod test {
 
     #[test]
     fn test_left_rec() {
-        let grammar = parse_str::<Grammar>("
+        let grammar = parse_str::<Grammar>(
+            "
             x = x y
             y = y x
-        ").unwrap();
+        ",
+        )
+        .unwrap();
         let mut compiler = grammar.to_compiler();
         compiler.left_rec();
         assert!(compiler.rules.iter().all(|rule| rule.is_left_rec));
 
-        let grammar = parse_str::<Grammar>("
+        let grammar = parse_str::<Grammar>(
+            "
             x = '0'..='9'
             y = x y?
-        ").unwrap();
+        ",
+        )
+        .unwrap();
         let mut compiler = grammar.to_compiler();
         compiler.left_rec();
         assert!(!compiler.rules.iter().any(|rule| rule.is_left_rec));
@@ -865,20 +890,27 @@ mod test {
 
     #[test]
     fn test_seq_edges() {
-        if let Ok(Expr::Seq(..)) = parse_str::<Expr<Ident>>("r: $e") {}
-        else { assert!(false) }
+        if let Ok(Expr::Seq(..)) = parse_str::<Expr<Ident>>("r: $e") {
+        } else {
+            assert!(false)
+        }
 
-        if let Ok(Expr::Seq(..)) = parse_str::<Expr<Ident>>("$e {}") {}
-        else { assert!(false) }
+        if let Ok(Expr::Seq(..)) = parse_str::<Expr<Ident>>("$e {}") {
+        } else {
+            assert!(false)
+        }
     }
 
     #[test]
     fn test_left_rec_precision() {
-        let grammar = parse_str::<Grammar>("
+        let grammar = parse_str::<Grammar>(
+            "
             x = '0'..='9'
             y -> (Span<'a>, ()) = r: $(y x | x) { r }
             z -> (Span<'a>, ()) = r: y { r }
-        ").unwrap();
+        ",
+        )
+        .unwrap();
         let mut compiler = grammar.to_compiler();
         compiler.left_rec();
         assert!(!compiler.rules[0].is_left_rec);
